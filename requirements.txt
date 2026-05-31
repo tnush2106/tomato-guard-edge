@@ -1,0 +1,32 @@
+# ──────────────────────────────────────────────
+# Requirements — Tomato Disease Detection
+# Platform: Raspberry Pi 4 (ARM64)
+# ──────────────────────────────────────────────
+#
+# opencv và numpy được cài qua apt (KHÔNG cài qua pip):
+#   sudo apt install python3-opencv python3-numpy rpicam-apps
+#
+# Chỉ cài các thư viện sau qua pip:
+
+# Core — Web server + YOLO inference
+flask>=2.3.0
+ultralytics>=8.0.0
+ncnn
+
+# Chatbot AI (LangGraph + OpenAI)
+langchain-core
+langchain-openai
+langgraph
+langchain
+langchain_community
+tavily-python
+pypdf
+cryptography
+sentence-transformers
+faiss-cpu
+
+# ──────────────────────────────────────────────
+# Lưu ý khi chạy trên Raspberry Pi:
+# export OPENBLAS_CORETYPE=ARMV8
+# export OMP_NUM_THREADS=4
+# ──────────────────────────────────────────────
