@@ -385,13 +385,6 @@ Gợi ý bullet ngắn:
 
 Developed an edge-AI monitoring system using Raspberry Pi 4 and an ESP32 HAT. Trained and deployed a YOLO26n/NCNN model to detect six tomato leaf disease and nutrient-deficiency classes, and built a Flask dashboard integrating live video, sensor telemetry, UART-based actuator control, and a LangGraph/RAG agricultural assistant. The model achieved **84.44% mAP@50**, **85.49% precision**, and **78.84% recall** on the validation set after 100 epochs.
 
-Suggested CV bullets:
-
-- Trained a six-class YOLO26n detector with **84.44% mAP@50** on the validation set and exported it to NCNN for Raspberry Pi edge inference.
-- Integrated Raspberry Pi 4 and a custom ESP32 HAT through acknowledged JSON-over-UART communication for sensor telemetry and three-relay control.
-- Built a Flask dashboard and LangGraph/FAISS assistant combining live video, detections, station context, and agricultural recommendations.
-
-> Chỉ giữ các bullet phản ánh đúng phần việc cá nhân. Nếu đây là đồ án nhóm, cần sửa động từ và phạm vi đóng góp trước khi đưa vào CV.
 
 ## Tác giả và giấy phép
 
