@@ -3,52 +3,44 @@
 # Hiển thị real-time trên màn hình (HDMI/VNC) - tối ưu cho Pi 4
 # Chạy: python camera_pi_realtime.py
 
+import os
+os.environ.setdefault("OMP_NUM_THREADS", "4")
+
 import cv2
 import numpy as np
 import subprocess
 import threading
 import time
-import os
 import queue
 from collections import deque
+from pathlib import Path
 from PIL import ImageFont, ImageDraw, Image
+from dotenv import load_dotenv
+from vision.model_config import (
+    CLASS_VI, COLORS, DEFAULT_CLASS_NAMES, class_names_from_model,
+    resolve_model_path, validate_class_schema, validate_model_path,
+)
 
-# ── Fix ARM ───────────────────────────────────────────────────
-os.environ["OPENBLAS_CORETYPE"] = "ARMV8"
-os.environ["OMP_NUM_THREADS"] = "4"
+BASE_DIR = Path(__file__).resolve().parent
+load_dotenv(BASE_DIR / ".env")
 
 # ── Config ────────────────────────────────────────────────────
-MODEL_PATH = "model/yolo11n_tomato_best_ncnn_model"
-CONF_THRESH = 0.35
-IMGSZ = 320  # Giảm để tăng tốc độ
+MODEL_PATH = resolve_model_path(BASE_DIR)
+MODEL_FORMAT = "unknown"
+CONF_THRESH = float(os.getenv("MODEL_CONFIDENCE", "0.35"))
+IMGSZ = int(os.getenv("MODEL_IMGSZ", "640"))
 CAM_WIDTH = 640
 CAM_HEIGHT = 480
 CAM_FPS = 15
-INFERENCE_FPS = 3  # Chỉ chạy inference 3 FPS
-
-CLASS_NAMES = [
-    "Late_blight", "Leaf_Mold", "Septoria_leaf_spot",
-    "Spider_mites", "Target_Spot", "Tomato_Yellow_Leaf_Curl_Virus"
-]
-CLASS_VI = {
-    "Late_blight": "Mốc sương",
-    "Leaf_Mold": "Mốc lá",
-    "Septoria_leaf_spot": "Đốm lá Septoria",
-    "Spider_mites": "Nhện đỏ",
-    "Target_Spot": "Đốm bia",
-    "Tomato_Yellow_Leaf_Curl_Virus": "Virus xoăn vàng lá",
-}
-COLORS = [
-    (231,76,60), (26,188,156), (243,156,18),
-    (52,152,219), (155,89,182), (22,160,133)
-]
+INFERENCE_FPS = float(os.getenv("INFERENCE_FPS", "3"))
+CLASS_NAMES = dict(DEFAULT_CLASS_NAMES)
 DISEASE_INFO = {
-    "Late_blight": "Xử lý: Cắt bỏ lá, phun Metalaxyl",
-    "Leaf_Mold": "Xử lý: Tăng thông gió, phun Chlorothalonil",
-    "Septoria_leaf_spot": "Xử lý: Phun Mancozeb, loại bỏ lá già",
-    "Spider_mites": "Xử lý: Phun Abamectin hoặc dầu Neem",
-    "Target_Spot": "Xử lý: Phun Chlorothalonil, luân canh cây trồng",
-    "Tomato_Yellow_Leaf_Curl_Virus": "Xử lý: Diệt bọ phấn, nhổ bỏ cây bệnh",
+    "Late_Blight": "Xử lý: Cắt bỏ lá, phun Metalaxyl + Mancozeb",
+    "Leaf_Miner": "Xử lý: Phun Abamectin, dùng bẫy dính vàng",
+    "Magnesium_Deficiency": "Xử lý: Bổ sung MgSO₄ và kiểm tra pH đất",
+    "Nitrogen_Deficiency": "Xử lý: Bổ sung đạm theo liều khuyến nghị",
+    "Potassium_Deficiency": "Xử lý: Bổ sung KCl hoặc K₂SO₄",
+    "Spotted_Wilt_Virus": "Xử lý: Nhổ cây bệnh và kiểm soát bọ trĩ",
 }
 
 # ── Global state ──────────────────────────────────────────────
@@ -170,64 +162,20 @@ class PiCamera:
 
 
 
-# ── Custom Architecture Module (CBAM) ─────────────────────────
-import torch
-import torch.nn as nn
-import ultralytics.nn.modules.conv as u_conv
-import ultralytics.nn.tasks as u_tasks
-
-class ChannelAttention(nn.Module):
-    def __init__(self, in_planes, ratio=16):
-        super(ChannelAttention, self).__init__()
-        self.avg_pool = nn.AdaptiveAvgPool2d(1)
-        self.max_pool = nn.AdaptiveMaxPool2d(1)
-        self.fc = nn.Sequential(
-            nn.Conv2d(in_planes, in_planes // ratio, 1, bias=False),
-            nn.ReLU(),
-            nn.Conv2d(in_planes // ratio, in_planes, 1, bias=False)
-        )
-        self.sigmoid = nn.Sigmoid()
-    def forward(self, x):
-        return self.sigmoid(self.fc(self.avg_pool(x)) + self.fc(self.max_pool(x)))
-
-class SpatialAttention(nn.Module):
-    def __init__(self, kernel_size=7):
-        super(SpatialAttention, self).__init__()
-        self.conv1 = nn.Conv2d(2, 1, kernel_size, padding=(3 if kernel_size == 7 else 1), bias=False)
-        self.sigmoid = nn.Sigmoid()
-    def forward(self, x):
-        return self.sigmoid(self.conv1(torch.cat([torch.mean(x, dim=1, keepdim=True), torch.max(x, dim=1, keepdim=True)[0]], dim=1)))
-
-class CBAM(nn.Module):
-    def __init__(self, c1, c2=None, ratio=16, kernel_size=7):
-        super(CBAM, self).__init__()
-        self.ca = ChannelAttention(c1, ratio)
-        self.sa = SpatialAttention(kernel_size)
-    def forward(self, x):
-        return x * self.ca(x) * self.sa(x)
-
-# Monkey-patching Ultralytics
-u_conv.CBAM = CBAM
-setattr(u_tasks, 'CBAM', CBAM)
-original_parse_model = u_tasks.parse_model
-def custom_parse_model(d, ch, verbose=True):
-    globals()['CBAM'] = CBAM
-    return original_parse_model(d, ch, verbose)
-u_tasks.parse_model = custom_parse_model
-
-
 def inference_worker():
     """Thread riêng cho YOLO inference."""
-    global model, yolo_ok, latest_detections
+    global model, yolo_ok, latest_detections, MODEL_FORMAT, CLASS_NAMES
     
     try:
-        print("⏳ Đang load YOLO model custom CBAM...")
+        MODEL_FORMAT = validate_model_path(MODEL_PATH)
+        print(f"⏳ Đang load YOLO {MODEL_FORMAT.upper()}: {MODEL_PATH}")
         from ultralytics import YOLO
-        model = YOLO(MODEL_PATH)
-        test_img = np.zeros((64, 64, 3), dtype=np.uint8)
-        model.predict(test_img, conf=0.5, imgsz=64, verbose=False)
+        model = YOLO(str(MODEL_PATH))
+        test_img = np.zeros((IMGSZ, IMGSZ, 3), dtype=np.uint8)
+        model.predict(test_img, conf=0.5, imgsz=IMGSZ, verbose=False)
+        CLASS_NAMES = validate_class_schema(class_names_from_model(model))
         yolo_ok = True
-        print(f"✅ YOLO sẵn sàng! Classes: {len(CLASS_NAMES)}")
+        print(f"✅ YOLO sẵn sàng: {len(CLASS_NAMES)} lớp {CLASS_NAMES}")
     except Exception as e:
         print(f"⚠️  YOLO không hoạt động: {e}")
         print("Camera vẫn chạy (không có detection)")
@@ -265,6 +213,8 @@ def inference_worker():
             for r in results:
                 for box in r.boxes:
                     cls_id = int(box.cls)
+                    if cls_id not in CLASS_NAMES:
+                        continue
                     conf = float(box.conf)
                     x1, y1, x2, y2 = map(int, box.xyxy[0])
                     name = CLASS_NAMES[cls_id]

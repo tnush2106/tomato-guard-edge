@@ -4,6 +4,9 @@
 
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
 echo "=========================================="
 echo "  Setup Real-time Detection - Pi 4"
 echo "=========================================="
@@ -45,14 +48,12 @@ echo "✅ Virtual environment đã tạo"
 # 3. Set biến môi trường
 echo ""
 echo "🔧 Bước 3: Set biến môi trường..."
-export OPENBLAS_CORETYPE=ARMV8
 export OMP_NUM_THREADS=4
 
 # Thêm vào ~/.bashrc nếu chưa có
-if ! grep -q "OPENBLAS_CORETYPE" ~/.bashrc; then
+if ! grep -q "OMP_NUM_THREADS" ~/.bashrc; then
     echo "" >> ~/.bashrc
-    echo "# Fix cho Raspberry Pi ARM" >> ~/.bashrc
-    echo "export OPENBLAS_CORETYPE=ARMV8" >> ~/.bashrc
+    echo "# Gioi han so luong luong CPU cho ung dung" >> ~/.bashrc
     echo "export OMP_NUM_THREADS=4" >> ~/.bashrc
     echo "✅ Đã thêm biến môi trường vào ~/.bashrc"
 else
@@ -72,19 +73,25 @@ echo ""
 echo "🧪 Bước 5: Test YOLO model..."
 python3 << 'EOF'
 import os
-os.environ["OPENBLAS_CORETYPE"] = "ARMV8"
 os.environ["OMP_NUM_THREADS"] = "4"
 
 try:
     from ultralytics import YOLO
     import numpy as np
+    from pathlib import Path
+    import os
+    from dotenv import load_dotenv
+
+    load_dotenv()
     
-    print("  Loading model...")
-    model = YOLO("model/yolo11n_tomato_best_ncnn_model")
+    model_path = Path(os.getenv("MODEL_PATH", "model/tomato_6cls_ncnn_model"))
+    imgsz = int(os.getenv("MODEL_IMGSZ", "640"))
+    print(f"  Loading model: {model_path}...")
+    model = YOLO(str(model_path))
     
     print("  Testing inference...")
-    test_img = np.zeros((64, 64, 3), dtype=np.uint8)
-    model.predict(test_img, conf=0.5, imgsz=64, verbose=False)
+    test_img = np.zeros((imgsz, imgsz, 3), dtype=np.uint8)
+    model.predict(test_img, conf=0.5, imgsz=imgsz, verbose=False)
     
     print("✅ YOLO model hoạt động tốt!")
 except Exception as e:
@@ -109,8 +116,10 @@ echo "🚀 Bước 7: Tạo script khởi động nhanh..."
 
 cat > run_web.sh << 'EOF'
 #!/bin/bash
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
 source venv/bin/activate
-export OPENBLAS_CORETYPE=ARMV8
 export OMP_NUM_THREADS=4
 python app_pi_realtime.py
 EOF
@@ -118,8 +127,10 @@ chmod +x run_web.sh
 
 cat > run_display.sh << 'EOF'
 #!/bin/bash
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
 source venv/bin/activate
-export OPENBLAS_CORETYPE=ARMV8
 export OMP_NUM_THREADS=4
 python camera_pi_realtime.py
 EOF

@@ -1,0 +1,1661 @@
+<!DOCTYPE html>
+<html lang="vi" class="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  <title>TomatoGuard Edge — Trạm Giám Sát Nông Nghiệp AI</title>
+  <meta name="description" content="Dashboard Edge AI cho Raspberry Pi 4 + ESP32 HAT: camera AI, cảm biến môi trường và điều khiển relay.">
+  <meta name="theme-color" content="#0f766e">
+  
+  <!-- Tailwind CSS & Theme Light Clean -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://code.iconify.design/iconify-icon/1.0.8/iconify-icon.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace']
+          },
+          colors: {
+            brand: {
+              50: '#ecfdf5',
+              100: '#d1fae5',
+              500: '#10b981',
+              600: '#059669',
+              700: '#047857'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    :root {
+      --brand-950: #042f2e;
+      --brand-900: #134e4a;
+      --brand-800: #115e59;
+      --brand-700: #0f766e;
+      --brand-600: #0d9488;
+      --brand-500: #14b8a6;
+      --surface: #ffffff;
+      --canvas: #f4f7f6;
+      --line: #dfe7e5;
+      --text: #0f172a;
+      --muted: #64748b;
+    }
+    html { scroll-behavior: smooth; }
+    body {
+      background:
+        radial-gradient(circle at 90% -10%, rgba(20,184,166,.10), transparent 26rem),
+        linear-gradient(180deg, #f8fbfa 0%, #f2f6f5 100%);
+      color: var(--text);
+    }
+    body::before {
+      content: ""; position: fixed; inset: 0; pointer-events: none; z-index: -1; opacity: .35;
+      background-image: linear-gradient(rgba(15,118,110,.03) 1px, transparent 1px), linear-gradient(90deg, rgba(15,118,110,.03) 1px, transparent 1px);
+      background-size: 32px 32px;
+    }
+    .nav-item-active {
+      background: linear-gradient(135deg, #ecfdf5, #f0fdfa) !important;
+      color: #0f766e !important;
+      border-color: #99f6e4 !important;
+      box-shadow: inset 3px 0 0 #0f766e, 0 4px 16px rgba(15,118,110,.06);
+      font-weight: 700;
+    }
+    .relay-card-active {
+      border-color: #5eead4 !important;
+      background: linear-gradient(180deg, #f0fdfa, #f8fffd) !important;
+      box-shadow: 0 10px 30px rgba(13,148,136,.10);
+    }
+    .surface-card {
+      background: rgba(255,255,255,.92);
+      border: 1px solid rgba(203,213,225,.80);
+      box-shadow: 0 8px 30px rgba(15,23,42,.045);
+      backdrop-filter: blur(12px);
+    }
+    .metric-card {
+      position: relative; overflow: hidden; transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
+    }
+    .metric-card::after {
+      content: ""; position: absolute; width: 88px; height: 88px; border-radius: 999px; right: -30px; top: -36px;
+      background: radial-gradient(circle, rgba(20,184,166,.12), transparent 70%);
+    }
+    .metric-card:hover { transform: translateY(-2px); border-color: #b7d8d2; box-shadow: 0 12px 34px rgba(15,23,42,.075); }
+    .status-dot { width: 8px; height: 8px; border-radius: 999px; display: inline-block; box-shadow: 0 0 0 4px rgba(16,185,129,.10); }
+    .topology-node {
+      border: 1px solid #dbe7e4; background: linear-gradient(180deg,#fff,#f8fbfa); border-radius: 14px; padding: 12px 14px; min-width: 128px;
+      box-shadow: 0 6px 20px rgba(15,23,42,.04);
+    }
+    .topology-arrow { color: #94a3b8; font-size: 18px; flex: 0 0 auto; }
+    .sensor-progress { height: 5px; border-radius: 999px; background: #e8efed; overflow: hidden; }
+    .sensor-progress > span { display:block; height:100%; border-radius:inherit; transition:width .35s ease; background: linear-gradient(90deg,#0d9488,#14b8a6); }
+    .soft-grid { background-image: radial-gradient(rgba(15,118,110,.12) 1px, transparent 1px); background-size: 18px 18px; }
+    .focus-ring:focus-visible { outline: 3px solid rgba(20,184,166,.22); outline-offset: 2px; }
+    #toastStack { position: fixed; top: 78px; right: 20px; z-index: 80; display:flex; flex-direction:column; gap:10px; pointer-events:none; }
+    .toast { min-width: 290px; max-width: 380px; border: 1px solid #dbe7e4; background: rgba(255,255,255,.97); border-radius: 14px; padding: 12px 14px; box-shadow: 0 18px 50px rgba(15,23,42,.16); animation: toastIn .24s ease both; }
+    @keyframes toastIn { from { opacity:0; transform: translateY(-8px) translateX(12px); } to { opacity:1; transform:none; } }
+    .bg-white.rounded-xl.border { box-shadow: 0 7px 24px rgba(15,23,42,.04); }
+    button, input { -webkit-tap-highlight-color: transparent; }
+    button { transition: transform .15s ease, box-shadow .15s ease, background-color .15s ease, border-color .15s ease; }
+    button:active { transform: translateY(1px); }
+    button:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #eef3f2; }
+    ::-webkit-scrollbar-thumb { background: #bccbc8; border-radius: 9999px; }
+    @media (max-width: 640px) { .toast { min-width: calc(100vw - 32px); } #toastStack { left:16px; right:16px; top:70px; } }
+  </style>
+</head>
+
+<body class="font-sans antialiased min-h-screen flex selection:bg-brand-100 selection:text-brand-700">
+
+  <!-- ==================== SIDEBAR ĐIỀU HƯỚNG BÊN TRÁI ==================== -->
+  <aside class="w-72 bg-white/95 backdrop-blur-xl border-r border-slate-200 hidden lg:flex flex-col justify-between shrink-0 z-40 shadow-[8px_0_30px_rgba(15,23,42,0.025)]">
+    <div class="flex flex-col h-full">
+      
+      <!-- Brand Header -->
+      <div class="px-4 pt-4">
+        <div class="rounded-2xl bg-gradient-to-br from-teal-950 via-teal-900 to-emerald-800 px-4 py-4 text-white shadow-lg shadow-teal-950/10 overflow-hidden relative">
+          <div class="absolute -right-6 -top-8 h-24 w-24 rounded-full bg-white/10"></div>
+          <div class="flex items-center gap-3 relative">
+            <div class="h-10 w-10 rounded-xl bg-white border border-white/60 flex items-center justify-center shrink-0 p-1"><img src="{{ url_for('static', filename='bk_hcm_logo.png', v='20260926-2') }}" alt="Logo Trường Đại học Bách khoa TP.HCM" class="h-full w-full object-contain"></div>
+            <div>
+              <h1 class="text-sm font-extrabold tracking-[0.08em] uppercase">TomatoGuard <span class="text-teal-200">Edge</span></h1>
+              <p class="text-[10px] text-teal-100/75 mt-0.5">Agricultural Monitoring Station</p>
+            </div>
+          </div>
+          <div class="mt-3 flex items-center justify-between text-[10px] font-mono relative">
+            <span class="text-teal-100/80">RPi 4B · ESP32 HAT</span>
+            <span id="edgeStatus" class="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2 py-1 text-teal-100 border border-teal-300/15">ĐANG KẾT NỐI</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Navigation Menu -->
+      <div class="p-3.5 space-y-6 flex-1 overflow-y-auto">
+        <div>
+          <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider px-3 mb-2 block">Vận hành trạm</span>
+          <nav class="space-y-1">
+            <!-- 1. Màn hình Camera AI -->
+            <button onclick="switchTab('monitor')" id="nav-monitor" class="nav-item-active w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-medium text-slate-600 hover:bg-slate-50 transition border border-transparent">
+              <iconify-icon icon="solar:videocamera-record-bold" width="18" height="18" class="text-emerald-600"></iconify-icon>
+              <span>Giám sát Camera AI</span>
+            </button>
+
+            <!-- 2. Màn hình Mạch mở rộng HAT & Relay (MỚI TÍCH HỢP) -->
+            <button onclick="switchTab('hat')" id="nav-hat" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition border border-transparent">
+              <div class="flex items-center gap-3">
+                <iconify-icon icon="solar:tuning-square-2-bold" width="18" height="18" class="text-slate-400"></iconify-icon>
+                <span>Bo Mạch HAT & Relay</span>
+              </div>
+              <span class="h-2 w-2 rounded-full bg-emerald-500"></span>
+            </button>
+
+            <!-- 3. Phân tích & Nhật ký -->
+            <button onclick="switchTab('analytics')" id="nav-analytics" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition border border-transparent">
+              <iconify-icon icon="solar:chart-square-bold" width="18" height="18" class="text-slate-400"></iconify-icon>
+              <span>Phân tích & Nhật ký</span>
+            </button>
+          </nav>
+        </div>
+
+        <div>
+          <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider px-3 mb-2 block">Dữ liệu & Cố vấn</span>
+          <nav class="space-y-1">
+            <!-- 4. Thư viện thông tin bệnh và rối loạn dinh dưỡng -->
+            <button onclick="switchTab('encyclopedia')" id="nav-encyclopedia" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition border border-transparent">
+              <iconify-icon icon="solar:book-bookmark-bold" width="18" height="18" class="text-slate-400"></iconify-icon>
+              <span>Thư viện thông tin bệnh và rối loạn dinh dưỡng</span>
+            </button>
+
+            <!-- 5. Trợ lý AI -->
+            <button onclick="switchTab('ai-assistant')" id="nav-ai-assistant" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition border border-transparent">
+              <div class="flex items-center gap-3">
+                <iconify-icon icon="solar:chat-round-dots-bold" width="18" height="18" class="text-slate-400"></iconify-icon>
+                <span>Trợ lý Nông học AI</span>
+              </div>
+              <span id="aiActiveBadge" class="hidden h-2 w-2 rounded-full bg-emerald-500 animate-ping"></span>
+            </button>
+          </nav>
+        </div>
+      </div>
+
+      <!-- Quick Telemetry Footnote -->
+      <div class="p-3.5 mx-3 mb-4 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-1.5">
+        <div class="flex items-center justify-between pb-1 border-b border-slate-200/60">
+          <span class="font-semibold text-slate-700 text-[11px]">Hệ Thống Biên</span>
+          <span id="sideStatus" class="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 font-mono text-[9px] font-bold">--</span>
+        </div>
+        <div class="flex justify-between text-[11px]">
+          <span class="text-slate-500">Vi xử lý / HAT:</span>
+          <span class="font-mono text-slate-700 font-medium">RPi 4B + ESP32</span>
+        </div>
+        <div class="flex justify-between text-[11px]">
+          <span class="text-slate-500">Nhiệt độ CPU:</span>
+          <span id="sideTemp" class="font-mono text-slate-500 font-bold">--</span>
+        </div>
+      </div>
+
+    </div>
+  </aside>
+
+  <!-- Mobile Bottom Nav -->
+  <nav class="fixed bottom-0 left-0 right-0 z-40 lg:hidden flex items-center justify-around py-2 border-t border-slate-200 bg-white/95 backdrop-blur-md text-slate-600 text-[10px]">
+    <button onclick="switchTab('monitor')" class="flex flex-col items-center gap-0.5 text-emerald-600">
+      <iconify-icon icon="solar:videocamera-record-bold" width="20" height="20"></iconify-icon>
+      <span>Camera</span>
+    </button>
+    <button onclick="switchTab('hat')" class="flex flex-col items-center gap-0.5">
+      <iconify-icon icon="solar:tuning-square-2-bold" width="20" height="20"></iconify-icon>
+      <span>Bo HAT</span>
+    </button>
+    <button onclick="switchTab('analytics')" class="flex flex-col items-center gap-0.5">
+      <iconify-icon icon="solar:chart-square-bold" width="20" height="20"></iconify-icon>
+      <span>Phân tích</span>
+    </button>
+    <button onclick="switchTab('ai-assistant')" class="flex flex-col items-center gap-0.5">
+      <iconify-icon icon="solar:chat-round-dots-bold" width="20" height="20"></iconify-icon>
+      <span>Trợ lý AI</span>
+    </button>
+  </nav>
+
+  <!-- ==================== MAIN CONTENT ==================== -->
+  <div class="flex-1 flex flex-col min-h-screen overflow-y-auto pb-16 lg:pb-0">
+
+    <!-- Top Header -->
+    <header class="sticky top-0 z-30 bg-white/90 backdrop-blur-xl border-b border-slate-200/80 px-4 sm:px-8 py-3">
+      <div class="flex items-center justify-between gap-4">
+        <div class="min-w-0 flex items-center gap-3">
+          <img src="{{ url_for('static', filename='bk_hcm_logo.png', v='20260926-2') }}" alt="Logo Bách khoa TP.HCM" class="lg:hidden h-9 w-9 object-contain shrink-0">
+          <div class="min-w-0">
+            <div class="flex items-center gap-2.5">
+              <span id="headerHealthDot" class="status-dot bg-emerald-500 shrink-0"></span>
+              <h2 id="headerTitle" class="text-sm sm:text-[15px] font-bold text-slate-800 truncate">Trạm Giám Sát Thị Giác Máy Tính & Phần Cứng</h2>
+            </div>
+            <div class="hidden sm:flex items-center gap-2 mt-1.5 text-[10px] font-mono text-slate-400">
+              <span id="headerModelChip" class="px-2 py-0.5 rounded-md bg-teal-50 text-teal-700 border border-teal-100">Edge AI · --</span>
+              <span>UART 115200</span><span class="text-slate-300">•</span><span id="lastUpdateText">Chờ dữ liệu...</span>
+            </div>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <span id="globalModeBadge" class="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-teal-50 border border-teal-100 text-[10px] font-bold text-teal-700">
+            <iconify-icon icon="solar:bolt-circle-bold"></iconify-icon> --
+          </span>
+          <div class="flex items-center gap-2 bg-slate-50 border border-slate-200 px-2.5 sm:px-3 py-1.5 rounded-lg text-[10px] sm:text-xs font-mono text-slate-600">
+            <iconify-icon icon="solar:clock-circle-linear" class="text-slate-400"></iconify-icon>
+            <span id="headerUptime">--</span>
+          </div>
+          <button id="soundToggle" aria-label="Bật tắt âm thanh cảnh báo" class="focus-ring h-8 w-8 rounded-lg border border-slate-200 bg-white flex items-center justify-center text-slate-500 hover:text-teal-700 hover:border-teal-200">
+            <iconify-icon id="soundIcon" icon="solar:volume-loud-bold" width="16" height="16"></iconify-icon>
+          </button>
+          <form action="{{ url_for('logout') }}" method="post" class="m-0">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button type="submit" aria-label="Đăng xuất" title="Đăng xuất" class="focus-ring h-8 w-8 rounded-lg border border-slate-200 bg-white flex items-center justify-center text-slate-500 hover:text-red-600 hover:border-red-200">
+              <iconify-icon icon="solar:logout-2-linear" width="16" height="16"></iconify-icon>
+            </button>
+          </form>
+        </div>
+      </div>
+    </header>
+
+    <!-- Live system strip -->
+    <div class="px-4 sm:px-8 pt-4">
+      <div class="surface-card rounded-xl px-3.5 py-2.5 flex flex-wrap items-center gap-x-5 gap-y-2 text-[10px] sm:text-[11px]">
+        <div class="flex items-center gap-2"><span id="apiStatusDot" class="h-2 w-2 rounded-full bg-slate-300"></span><span class="text-slate-500">Web API</span><strong id="apiStatusText" class="text-slate-700">Đang kết nối</strong></div>
+        <div class="flex items-center gap-2"><span id="hatStatusDot" class="h-2 w-2 rounded-full bg-slate-300"></span><span class="text-slate-500">ESP32 HAT</span><strong id="hatStatusText" class="text-slate-700">Chờ dữ liệu</strong></div>
+        <div class="flex items-center gap-2"><span id="cameraStatusDot" class="h-2 w-2 rounded-full bg-slate-300"></span><span class="text-slate-500">Camera</span><strong id="cameraStatusText" class="text-slate-700">Chờ dữ liệu</strong></div>
+        <div class="flex items-center gap-2 ml-auto"><span class="text-slate-400">Điều khiển:</span><strong id="stripModeText" class="text-teal-700">--</strong></div>
+        <span id="hatErrorBadge" class="hidden px-2 py-0.5 rounded-md bg-amber-50 border border-amber-200 text-[10px] font-mono text-amber-700" role="status"></span>
+      </div>
+    </div>
+
+    <!-- Banner Báo Bệnh Khẩn Cấp -->
+    <div id="criticalBanner" class="hidden mx-4 sm:mx-8 mt-4 p-4 rounded-xl border-l-4 border-red-500 bg-red-50 border border-red-200 flex items-center justify-between text-xs">
+      <div class="flex items-center gap-3">
+        <div class="h-8 w-8 rounded-lg bg-red-100 text-red-600 flex items-center justify-center shrink-0">
+          <iconify-icon icon="solar:danger-triangle-bold" width="20" height="20"></iconify-icon>
+        </div>
+        <div>
+          <p class="font-bold text-red-800 uppercase tracking-wider">Cảnh Báo Bùng Phát Dịch Hại</p>
+          <p id="criticalBannerText" class="text-red-700 mt-0.5">Phát hiện mầm bệnh nghiêm trọng trên diện tích quét camera.</p>
+        </div>
+      </div>
+      <button onclick="switchTab('ai-assistant')" class="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold transition shadow-sm">
+        Hỏi phác đồ AI ngay
+      </button>
+    </div>
+
+    <!-- ================= TAB 1: GIÁM SÁT CAMERA AI (MONITOR) ================= -->
+    <main id="tab-monitor" class="tab-content p-4 sm:p-8 space-y-6">
+      <!-- 4 KPI Cards gọn gàng -->
+      <section class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="metric-card surface-card rounded-xl p-4">
+          <div class="flex items-center justify-between text-xs text-slate-500 font-medium">
+            <span>Bệnh phát hiện</span>
+            <span id="countBadge" class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">Chờ dữ liệu</span>
+          </div>
+          <div class="mt-2 flex items-baseline gap-1.5">
+            <span id="diseaseCount" class="text-3xl font-extrabold font-mono text-slate-900">--</span>
+            <span class="text-xs text-slate-400">vùng tổn thương</span>
+          </div>
+        </div>
+
+        <div class="metric-card surface-card rounded-xl p-4">
+          <div class="flex items-center justify-between text-xs text-slate-500 font-medium">
+            <span>Tốc độ Inference</span>
+            <span class="text-emerald-600 font-mono text-[10px] font-semibold flex items-center gap-1">
+              <span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span> Live
+            </span>
+          </div>
+          <div class="mt-2 flex items-baseline gap-1.5">
+            <span id="fpsText" class="text-3xl font-extrabold font-mono text-slate-900">--</span>
+            <span class="text-xs text-slate-400">FPS</span>
+          </div>
+        </div>
+
+        <div class="metric-card surface-card rounded-xl p-4">
+          <div class="flex items-center justify-between text-xs text-slate-500 font-medium">
+            <span>Độ trễ xử lý</span>
+            <span class="text-blue-600 font-mono text-[10px] font-semibold">RPi 4B</span>
+          </div>
+          <div class="mt-2 flex items-baseline gap-1.5">
+            <span id="latencyText" class="text-3xl font-extrabold font-mono text-slate-900">--</span>
+            <span class="text-xs text-slate-400">ms/frame</span>
+          </div>
+        </div>
+
+        <div class="metric-card surface-card rounded-xl p-4">
+          <div class="flex items-center justify-between text-xs text-slate-500 font-medium">
+            <span>Cảm biến camera</span>
+            <span class="h-2 w-2 rounded-full bg-emerald-500"></span>
+          </div>
+          <div class="mt-2 flex items-baseline gap-1.5">
+            <span class="text-xl font-bold text-slate-900">IMX708</span>
+            <span class="text-xs text-slate-400 font-mono">Autofocus</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Video Feed & Diagnostics (12-Col Grid) -->
+      <div class="grid grid-cols-1 xl:grid-cols-12 gap-6">
+        
+        <div class="xl:col-span-8 space-y-4">
+          <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            
+            <div class="px-4 py-3 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+              <div class="flex items-center gap-2">
+                <span class="h-2 w-2 rounded-full bg-red-500 animate-pulse"></span>
+                <span class="text-xs font-bold text-slate-700 uppercase tracking-wider">Luồng Trực Tiếp Camera</span>
+                <span class="text-[11px] font-mono text-slate-400">(640×480 px)</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <button onclick="toggleBoundingBoxes()" id="toggleBoxesBtn" class="px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition">
+                  Box: BẬT
+                </button>
+                <button id="captureBtn" class="px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 transition flex items-center gap-1 shadow-xs">
+                  <iconify-icon icon="solar:camera-linear"></iconify-icon> Chụp ảnh
+                </button>
+                <button id="pauseBtn" class="px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 transition flex items-center gap-1 shadow-xs">
+                  <iconify-icon icon="solar:pause-linear"></iconify-icon> Tạm dừng
+                </button>
+              </div>
+            </div>
+
+            <!-- Viewport Camera -->
+            <div class="relative aspect-[4/3] bg-slate-950 flex items-center justify-center overflow-hidden" id="videoContainer">
+              <img id="videoFeed" src="/video?overlay=0" alt="Edge Live Stream" class="w-full h-full object-contain">
+              <canvas id="detectionCanvas" class="absolute inset-0 w-full h-full pointer-events-none"></canvas>
+
+              <div class="absolute bottom-3 left-3 flex items-center gap-2 pointer-events-none">
+                <span class="px-2 py-0.5 rounded bg-slate-900/80 backdrop-blur border border-slate-700 text-[10px] font-mono text-emerald-400">
+                  CONF ≥ <span id="confVal">0.65</span>
+                </span>
+                <span class="px-2 py-0.5 rounded bg-slate-900/80 backdrop-blur border border-slate-700 text-[10px] font-mono text-slate-300">
+                  FPS: <span id="fpsOverlay">--</span>
+                </span>
+              </div>
+            </div>
+
+            <div class="px-4 py-2.5 border-t border-slate-100 bg-white flex items-center justify-between text-xs">
+              <div class="flex items-center gap-3 w-72">
+                <span class="text-slate-500 text-[11px] font-medium shrink-0">Ngưỡng Conf:</span>
+                <input type="range" id="confSlider" min="0.3" max="0.95" step="0.05" value="0.65" class="w-full accent-emerald-600 cursor-pointer">
+              </div>
+              <div class="text-[11px] font-mono text-slate-400">
+                Model: <span class="text-slate-700 font-medium" data-model-name>--</span> · Runtime: <span class="text-emerald-600 font-medium">CPU ARMv8</span>
+              </div>
+            </div>
+            <div class="px-4 py-2.5 border-t border-slate-100 bg-emerald-50/40 text-xs flex flex-wrap items-center gap-2">
+              <span id="captureStatusMonitor" class="text-slate-600" role="status">Nhấn SW6 trên HAT để chụp ảnh.</span>
+              <a id="lastCaptureLinkMonitor" class="hidden text-teal-700 underline font-semibold" download>Xem ảnh chụp mới nhất</a>
+            </div>
+
+          </div>
+        </div>
+
+        <div class="xl:col-span-4 flex flex-col gap-4">
+          <div class="bg-white rounded-xl border border-slate-200 p-4 shadow-sm flex-1 flex flex-col">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div class="flex items-center gap-2">
+                <iconify-icon icon="solar:radar-2-bold" class="text-emerald-600" width="18" height="18"></iconify-icon>
+                <h3 class="text-xs font-bold uppercase tracking-wider text-slate-800">Chẩn Đoán Tức Thì</h3>
+              </div>
+              <span class="text-[10px] font-mono text-slate-400">Chu kỳ: 1.5s</span>
+            </div>
+            
+            <div id="detectionList" class="mt-3.5 space-y-2.5 flex-1 overflow-y-auto max-h-56 pr-1"></div>
+          </div>
+
+          <div class="bg-white rounded-xl border border-slate-200 p-4 shadow-sm flex-1">
+            <div class="flex items-center gap-2 pb-3 border-b border-slate-100">
+              <iconify-icon icon="solar:shield-cross-bold" class="text-blue-600" width="18" height="18"></iconify-icon>
+              <h3 class="text-xs font-bold uppercase tracking-wider text-slate-800">Phác Đồ Xử Lý Can Thiệp</h3>
+            </div>
+            <div id="treatmentPanel" class="mt-3.5 space-y-2.5 max-h-56 overflow-y-auto pr-1"></div>
+          </div>
+        </div>
+
+      </div>
+    </main>
+
+    <!-- ================= TAB 2: BO MẠCH HAT & RELAY (TAB RIÊNG BIỆT) ================= -->
+    <main id="tab-hat" class="tab-content hidden p-4 sm:p-8 space-y-6">
+
+      <!-- KHỐI 3 RELAY CƠ CẤU CHẤP HÀNH (ĐÈN, QUẠT, BƠM) -->
+      <section class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm space-y-4">
+        <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100">
+          <div>
+            <h2 class="text-sm font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
+              <iconify-icon icon="solar:tuning-square-2-bold" class="text-emerald-600" width="18" height="18"></iconify-icon>
+              Khối 3 Relay Đóng Cắt Tải (PC817 Opto + SPDT)
+            </h2>
+            <p class="text-xs text-slate-400 mt-0.5">Cách ly quang chống nhiễu ngược về vi điều khiển, có LED hiển thị và Diode dập xung 1N4007</p>
+          </div>
+
+          <!-- Mode Toggle: Auto / Manual -->
+          <div class="flex items-center gap-2 bg-slate-100 p-1 rounded-lg text-xs">
+            <button id="modeAuto" onclick="setControlMode('auto')" class="px-3.5 py-1.5 rounded-md text-xs font-semibold bg-white text-emerald-700 shadow-xs transition">
+              🤖 Tự Động (Cảm biến)
+            </button>
+            <button id="modeManual" onclick="setControlMode('manual')" class="px-3.5 py-1.5 rounded-md text-xs font-semibold text-slate-600 hover:text-slate-900 transition">
+              🖐️ Thủ Công (Bằng tay)
+            </button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+          <!-- RELAY 1: ĐÈN -->
+          <div id="cardRelay1" class="p-4 rounded-xl border border-slate-200 bg-slate-50/50 flex flex-col justify-between transition">
+            <div class="flex items-start justify-between">
+              <div class="flex items-center gap-3">
+                <div id="iconRelay1" class="h-11 w-11 rounded-xl bg-slate-200 text-slate-600 flex items-center justify-center text-2xl transition">
+                  <iconify-icon icon="solar:sun-bold"></iconify-icon>
+                </div>
+                <div>
+                  <span class="text-xs font-bold text-slate-800 block">Relay 1: Đèn Quang Hợp</span>
+                  <span class="text-[10px] font-mono text-slate-400">JP1 (DOMINO) · RL1</span>
+                </div>
+              </div>
+              <span id="badgeRelay1" class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-200 text-slate-600">OFF</span>
+            </div>
+
+            <div class="my-4 text-xs text-slate-500 space-y-1">
+              <div class="flex justify-between text-[11px]">
+                <span>Chỉ báo phần cứng:</span>
+                <span id="ledRelay1" class="font-mono text-slate-400">LED LD3 (Tắt)</span>
+              </div>
+              <div class="flex justify-between text-[11px]">
+                <span>Điều kiện kích tự động:</span>
+                <span class="font-medium text-slate-700">Theo ngưỡng ánh sáng firmware</span>
+              </div>
+            </div>
+
+            <button id="btnRelay1" aria-label="Điều khiển đèn quang hợp" onclick="toggleRelay(1)" class="w-full py-2 rounded-lg text-xs font-bold bg-white border border-slate-300 text-slate-700 hover:border-slate-400 shadow-xs transition">
+              BẬT ĐÈN
+            </button>
+          </div>
+
+          <!-- RELAY 2: QUẠT -->
+          <div id="cardRelay2" class="p-4 rounded-xl border border-slate-200 bg-slate-50/50 flex flex-col justify-between transition">
+            <div class="flex items-start justify-between">
+              <div class="flex items-center gap-3">
+                <div id="iconRelay2" class="h-11 w-11 rounded-xl bg-slate-200 text-slate-600 flex items-center justify-center text-2xl transition">
+                  <iconify-icon icon="solar:wind-bold"></iconify-icon>
+                </div>
+                <div>
+                  <span class="text-xs font-bold text-slate-800 block">Relay 2: Quạt Thông Gió</span>
+                  <span class="text-[10px] font-mono text-slate-400">JP2 (DOMINO) · RL2</span>
+                </div>
+              </div>
+              <span id="badgeRelay2" class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-200 text-slate-600">OFF</span>
+            </div>
+
+            <div class="my-4 text-xs text-slate-500 space-y-1">
+              <div class="flex justify-between text-[11px]">
+                <span>Chỉ báo phần cứng:</span>
+                <span id="ledRelay2" class="font-mono text-slate-400">LED LD4 (Tắt)</span>
+              </div>
+              <div class="flex justify-between text-[11px]">
+                <span>Điều kiện kích tự động:</span>
+                <span class="font-medium text-slate-700">Theo ngưỡng nhiệt / ẩm firmware</span>
+              </div>
+            </div>
+
+            <button id="btnRelay2" aria-label="Điều khiển quạt thông gió" onclick="toggleRelay(2)" class="w-full py-2 rounded-lg text-xs font-bold bg-white border border-slate-300 text-slate-700 hover:border-slate-400 shadow-xs transition">
+              BẬT QUẠT
+            </button>
+          </div>
+
+          <!-- RELAY 3: BƠM NƯỚC -->
+          <div id="cardRelay3" class="p-4 rounded-xl border border-slate-200 bg-slate-50/50 flex flex-col justify-between transition">
+            <div class="flex items-start justify-between">
+              <div class="flex items-center gap-3">
+                <div id="iconRelay3" class="h-11 w-11 rounded-xl bg-slate-200 text-slate-600 flex items-center justify-center text-2xl transition">
+                  <iconify-icon icon="solar:drop-bold"></iconify-icon>
+                </div>
+                <div>
+                  <span class="text-xs font-bold text-slate-800 block">Relay 3: Máy Bơm Tưới</span>
+                  <span class="text-[10px] font-mono text-slate-400">JP3 (DOMINO) · RL3</span>
+                </div>
+              </div>
+              <span id="badgeRelay3" class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-200 text-slate-600">OFF</span>
+            </div>
+
+            <div class="my-4 text-xs text-slate-500 space-y-1">
+              <div class="flex justify-between text-[11px]">
+                <span>Chỉ báo phần cứng:</span>
+                <span id="ledRelay3" class="font-mono text-slate-400">LED LD5 (Tắt)</span>
+              </div>
+              <div class="flex justify-between text-[11px]">
+                <span>Điều kiện kích tự động:</span>
+                <span class="font-medium text-slate-700">Theo ngưỡng đất đã hiệu chuẩn</span>
+              </div>
+            </div>
+
+            <button id="btnRelay3" aria-label="Điều khiển máy bơm tưới" onclick="toggleRelay(3)" class="w-full py-2 rounded-lg text-xs font-bold bg-white border border-slate-300 text-slate-700 hover:border-slate-400 shadow-xs transition">
+              BẬT BƠM
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- KHỐI 4 CẢM BIẾN MÔI TRƯỜNG & BIỂU ĐỒ -->
+      <section class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        <!-- Biểu đồ cảm biến 24h -->
+        <div class="lg:col-span-8 bg-white rounded-xl border border-slate-200 p-5 shadow-sm flex flex-col">
+          <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+            <div>
+              <h3 class="text-xs font-bold uppercase tracking-wider text-slate-800">Lịch Sử Môi Trường Trong Phiên (Bus I2C & ADC)</h3>
+              <p class="text-[11px] text-slate-400 mt-0.5">SHT31 (Nhiệt/Ẩm) · BH1750 (Quang thông) · ADS1115 (Độ ẩm đất)</p>
+            </div>
+            <span class="px-2 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-mono">Chu kỳ: 2s</span>
+          </div>
+
+          <div class="mt-4 h-72 w-full">
+            <canvas id="hatEnvChart"></canvas>
+          </div>
+        </div>
+
+        <!-- 4 Thẻ cảm biến chi tiết -->
+        <div class="lg:col-span-4 space-y-3">
+          
+          <div class="bg-white rounded-xl border border-slate-200 p-3.5 shadow-sm flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="h-9 w-9 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center text-lg">
+                🌡️
+              </div>
+              <div>
+                <span class="text-xs font-bold text-slate-800 block">Nhiệt Độ Không Khí</span>
+                <span class="text-[10px] font-mono text-slate-400">Sensor J4 (SHT31)</span>
+              </div>
+            </div>
+            <div class="text-right">
+              <span id="hatValTemp" class="text-xl font-black font-mono text-slate-900">--</span>
+              <span class="text-xs text-slate-500">°C</span>
+              <div class="sensor-progress mt-1.5 w-20"><span id="barTemp" style="width:0%"></span></div>
+            </div>
+          </div>
+
+          <div class="bg-white rounded-xl border border-slate-200 p-3.5 shadow-sm flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="h-9 w-9 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center text-lg">
+                💧
+              </div>
+              <div>
+                <span class="text-xs font-bold text-slate-800 block">Độ Ẩm Không Khí</span>
+                <span class="text-[10px] font-mono text-slate-400">Sensor J4 (SHT31)</span>
+              </div>
+            </div>
+            <div class="text-right">
+              <span id="hatValHum" class="text-xl font-black font-mono text-slate-900">--</span>
+              <span class="text-xs text-slate-500">%RH</span>
+              <div class="sensor-progress mt-1.5 w-20"><span id="barHum" style="width:0%"></span></div>
+            </div>
+          </div>
+
+          <div class="bg-white rounded-xl border border-slate-200 p-3.5 shadow-sm flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="h-9 w-9 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center text-lg">
+                ☀️
+              </div>
+              <div>
+                <span class="text-xs font-bold text-slate-800 block">Cường Độ Ánh Sáng</span>
+                <span class="text-[10px] font-mono text-slate-400">Sensor J3 (BH1750)</span>
+              </div>
+            </div>
+            <div class="text-right">
+              <span id="hatValLux" class="text-xl font-black font-mono text-slate-900">--</span>
+              <span class="text-xs text-slate-500">Lux</span>
+              <div class="sensor-progress mt-1.5 w-20"><span id="barLux" style="width:0%"></span></div>
+            </div>
+          </div>
+
+          <div class="bg-white rounded-xl border border-slate-200 p-3.5 shadow-sm flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="h-9 w-9 rounded-lg bg-cyan-50 text-cyan-600 flex items-center justify-center text-lg">
+                🌱
+              </div>
+              <div>
+                <span class="text-xs font-bold text-slate-800 block">Độ Ẩm Đất Canh Tác</span>
+                <span class="text-[10px] font-mono text-slate-400">J2 (Soil) + J5 (ADS1115)</span>
+              </div>
+            </div>
+            <div class="text-right">
+              <span id="hatValSoil" class="text-xl font-black font-mono text-slate-900">--</span>
+              <span class="text-xs text-slate-500">%</span>
+              <div class="sensor-progress mt-1.5 w-20"><span id="barSoil" style="width:0%"></span></div>
+            </div>
+          </div>
+
+        </div>
+
+      </section>
+
+      <p id="hatControlHint" class="text-xs text-slate-500" role="status">Chờ kết nối HAT.</p>
+      <p id="captureStatus" class="text-xs text-slate-500" role="status"></p>
+      <a id="lastCaptureLink" class="hidden text-xs text-teal-700 underline" download>Ảnh chụp mới nhất</a>
+
+      <!-- KHỐI MÀN HÌNH TFT & CỤM NÚT NHẤN CƠ HỌC -->
+      <section class="grid grid-cols-1 gap-6">
+        <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm space-y-3">
+          <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+            <div class="flex items-center gap-2">
+              <iconify-icon icon="solar:mouse-minimalistic-bold" class="text-emerald-600" width="18" height="18"></iconify-icon>
+              <h3 class="text-xs font-bold uppercase tracking-wider text-slate-800">Cụm Phím Bấm Cứng (Push Buttons)</h3>
+            </div>
+            <span class="text-[10px] font-mono text-slate-400">Điều khiển HAT</span>
+          </div>
+
+          <div class="grid grid-cols-3 gap-2.5 pt-1">
+            <div class="p-2.5 rounded-lg border border-slate-200 bg-slate-50 text-center">
+              <span class="text-[10px] font-mono text-slate-400 block">SW1 (RST)</span>
+              <span class="text-xs font-bold text-slate-700">Reset ESP</span>
+            </div>
+            <div class="p-2.5 rounded-lg border border-slate-200 bg-slate-50 text-center">
+              <span class="text-[10px] font-mono text-slate-400 block">SW2 (BOOT)</span>
+              <span class="text-xs font-bold text-slate-700">Flash Mode</span>
+            </div>
+            <button type="button" data-hat-action="up" disabled class="p-2.5 rounded-lg border border-slate-200 bg-slate-50 text-center cursor-pointer hover:bg-slate-100 transition" onclick="triggerHardwareAction('up')">
+              <span class="text-[10px] font-mono text-slate-400 block">SW3</span>
+              <span class="text-xs font-bold text-slate-700">UP</span>
+            </button>
+            <button type="button" data-hat-action="ok" disabled class="p-2.5 rounded-lg border border-slate-200 bg-slate-50 text-center cursor-pointer hover:bg-slate-100 transition" onclick="triggerHardwareAction('ok')">
+              <span class="text-[10px] font-mono text-slate-400 block">SW4</span>
+              <span class="text-xs font-bold text-slate-700">OK / Enter</span>
+            </button>
+            <button type="button" data-hat-action="down" disabled class="p-2.5 rounded-lg border border-slate-200 bg-slate-50 text-center cursor-pointer hover:bg-slate-100 transition" onclick="triggerHardwareAction('down')">
+              <span class="text-[10px] font-mono text-slate-400 block">SW5</span>
+              <span class="text-xs font-bold text-slate-700">DOWN</span>
+            </button>
+            <button type="button" data-hat-action="capture" disabled class="p-2.5 rounded-lg border border-emerald-200 bg-emerald-50 text-center cursor-pointer hover:bg-emerald-100 transition" onclick="triggerHardwareAction('capture')">
+              <span class="text-[10px] font-mono text-emerald-600 block">SW6 (CAPTURE)</span>
+              <span class="text-xs font-bold text-emerald-800">Chụp Ảnh AI</span>
+            </button>
+          </div>
+        </div>
+
+      </section>
+
+    </main>
+
+    <!-- ================= TAB 3: PHÂN TÍCH & NHẬT KÝ ================= -->
+    <main id="tab-analytics" class="tab-content hidden p-4 sm:p-8 space-y-6">
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        <div class="lg:col-span-8 bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+          <div class="flex items-center justify-between pb-4 border-b border-slate-100">
+            <div>
+              <h3 class="text-sm font-bold text-slate-800 uppercase tracking-wider">Số Vết Bệnh Trong Phiên Theo Dõi</h3>
+              <p class="text-xs text-slate-400 mt-0.5">Tối đa 300 lần cập nhật thực tế gần nhất trong phiên trình duyệt</p>
+            </div>
+            <button onclick="exportCSV()" class="px-3 py-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 text-xs font-semibold text-slate-700 transition flex items-center gap-1.5 shadow-xs">
+              <iconify-icon icon="solar:document-text-linear"></iconify-icon> Xuất CSV
+            </button>
+          </div>
+          <div class="mt-6 h-80">
+            <canvas id="lineChart"></canvas>
+          </div>
+        </div>
+
+        <div class="lg:col-span-4 bg-white rounded-xl border border-slate-200 p-6 shadow-sm space-y-4">
+          <h3 class="text-xs font-bold text-slate-800 uppercase tracking-wider pb-3 border-b border-slate-100 flex items-center gap-2">
+            <iconify-icon icon="solar:server-bold" class="text-emerald-600"></iconify-icon>
+            Thông Số Trạm Thực Địa
+          </h3>
+
+          <div class="space-y-3 text-xs">
+            <div class="flex justify-between py-1.5 border-b border-slate-100">
+              <span class="text-slate-500">Bo mạch chính</span>
+              <span class="font-mono text-slate-800 font-medium">Raspberry Pi 4B (4GB)</span>
+            </div>
+            <div class="flex justify-between py-1.5 border-b border-slate-100">
+              <span class="text-slate-500">Bo mở rộng HAT</span>
+              <span class="font-mono text-slate-800 font-medium">ESP32 + CP2102 + LM2596</span>
+            </div>
+            <div class="flex justify-between py-1.5 border-b border-slate-100">
+              <span class="text-slate-500">Kiến trúc AI</span>
+              <span class="font-mono text-emerald-600 font-bold" data-model-name>--</span>
+            </div>
+            <div class="flex justify-between py-1.5 border-b border-slate-100">
+              <span class="text-slate-500">Uptime trạm</span>
+              <span id="panelUptime" class="font-mono text-slate-700">--</span>
+            </div>
+            <div class="flex justify-between py-1.5">
+              <span class="text-slate-500">Nhiệt độ SoC Pi</span>
+              <span class="font-mono text-emerald-600 font-bold" id="panelCpuTemp">--</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </main>
+
+    <!-- ================= TAB 4: THƯ VIỆN THÔNG TIN BỆNH VÀ RỐI LOẠN DINH DƯỠNG ================= -->
+    <main id="tab-encyclopedia" class="tab-content hidden p-4 sm:p-8 space-y-6">
+      <div class="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-slate-100">
+          <div>
+            <h3 class="text-sm font-bold text-slate-800 uppercase tracking-wider">Thư viện thông tin bệnh và rối loạn dinh dưỡng</h3>
+            <p class="text-xs text-slate-400 mt-0.5">Tra cứu triệu chứng và hướng xử lý bệnh, sâu hại và rối loạn dinh dưỡng trên cây cà chua</p>
+          </div>
+          <div class="relative w-full md:w-80">
+            <iconify-icon icon="solar:magnifer-linear" class="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"></iconify-icon>
+            <input id="searchDisease" type="text" placeholder="Tìm bệnh, rối loạn dinh dưỡng hoặc hướng xử lý..." class="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-9 pr-4 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:bg-white transition">
+          </div>
+        </div>
+
+        <div id="encyclopediaGrid" class="mt-6 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"></div>
+      </div>
+    </main>
+
+    <!-- ================= TAB 5: TRỢ LÝ AI NÔNG HỌC ================= -->
+    <main id="tab-ai-assistant" class="tab-content hidden p-4 sm:p-8">
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden h-[calc(100vh-140px)] flex flex-col md:flex-row">
+        
+        <div class="w-full md:w-80 border-b md:border-b-0 md:border-r border-slate-200 p-5 flex flex-col justify-between bg-slate-50/70">
+          <div>
+            <div class="flex items-center gap-3 pb-4 border-b border-slate-200">
+              <div class="h-9 w-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold shadow-sm shadow-emerald-600/30">
+                🤖
+              </div>
+              <div>
+                <h4 class="text-xs font-bold text-slate-800">Chuyên Gia AI Nông Học</h4>
+                <p class="text-[10px] font-mono text-slate-400">RAG Context · AgroLLM</p>
+              </div>
+            </div>
+
+            <div class="mt-4 space-y-4">
+              <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Gợi ý câu hỏi nhanh</span>
+              <div class="space-y-2">
+                <button onclick="quickAsk('Khi phát hiện bệnh mốc sương, có nên bật Relay quạt thông gió để giảm ẩm không?')" class="w-full text-left p-2.5 rounded-xl bg-white hover:bg-emerald-50 hover:border-emerald-200 border border-slate-200 text-xs text-slate-700 transition shadow-xs">
+                  💨 Kích quạt thông gió khi mốc sương?
+                </button>
+                <button onclick="quickAsk('Độ ẩm đất bao nhiêu phần trăm thì cần bật máy bơm nước tưới?')" class="w-full text-left p-2.5 rounded-xl bg-white hover:bg-emerald-50 hover:border-emerald-200 border border-slate-200 text-xs text-slate-700 transition shadow-xs">
+                  💧 Ngưỡng ẩm đất để bật bơm tưới?
+                </button>
+                <button onclick="quickAsk('Cách khống chế mốc sương bùng phát trong mùa mưa?')" class="w-full text-left p-2.5 rounded-xl bg-white hover:bg-emerald-50 hover:border-emerald-200 border border-slate-200 text-xs text-slate-700 transition shadow-xs">
+                  🌧️ Khống chế mốc sương mùa mưa?
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <button onclick="clearChat()" class="mt-4 flex items-center justify-center gap-2 w-full py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-white hover:text-slate-900 text-xs transition">
+            <iconify-icon icon="solar:trash-bin-trash-linear"></iconify-icon>
+            Làm mới hội thoại
+          </button>
+        </div>
+
+        <div class="flex-1 flex flex-col bg-white">
+          <div id="fullChatMessages" class="flex-1 overflow-y-auto p-6 space-y-4 text-xs sm:text-sm">
+            <div class="flex justify-start">
+              <div class="max-w-[85%] rounded-2xl bg-slate-50 border border-slate-200 p-4 text-slate-700">
+                <p class="font-bold text-emerald-700 mb-1 text-xs">Xin chào!</p>
+                <p class="text-xs leading-relaxed text-slate-600">
+                  Tôi là trợ lý AI nông học giám sát trạm. Kết quả phát hiện bệnh từ mô hình AI và các chỉ số cảm biến/relay từ bo mạch HAT đang được cập nhật liên tục. Bạn cần tư vấn về phác đồ hay cách phối hợp vận hành thiết bị?
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div class="p-4 border-t border-slate-200 bg-slate-50/50">
+            <form id="fullChatForm" class="flex gap-2" onsubmit="handleChatSubmit(event)">
+              <input type="text" id="fullChatInput" placeholder="Nhập câu hỏi về bệnh học hoặc vận hành thiết bị..." class="flex-1 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 shadow-xs">
+              <button type="submit" class="px-5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-medium transition flex items-center justify-center shadow-sm">
+                <iconify-icon icon="solar:plain-2-bold" width="18" height="18"></iconify-icon>
+              </button>
+            </form>
+          </div>
+        </div>
+
+      </div>
+    </main>
+
+  </div>
+
+  <div id="toastStack" aria-live="polite" aria-atomic="true"></div>
+
+  <!-- Modal chi tiết bệnh và rối loạn dinh dưỡng -->
+  <div id="diseaseModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4">
+    <div class="w-full max-w-xl rounded-2xl border border-slate-200 bg-white p-6 shadow-xl relative">
+      <div class="flex items-start justify-between pb-4 border-b border-slate-100">
+        <div>
+          <span id="modalSeverity" class="text-[10px] uppercase font-bold tracking-widest text-slate-400"></span>
+          <h4 id="modalTitle" class="mt-1 text-xl font-bold text-slate-900"></h4>
+          <p id="modalSubtitle" class="text-xs font-mono text-slate-400"></p>
+        </div>
+        <button onclick="closeModal()" class="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition">
+          <iconify-icon icon="solar:close-circle-bold" width="22" height="22"></iconify-icon>
+        </button>
+      </div>
+
+      <div class="mt-5 space-y-3.5 text-xs">
+        <div class="p-4 rounded-xl border border-slate-100 bg-slate-50">
+          <p class="font-bold text-slate-500 uppercase tracking-wider text-[11px]">Triệu chứng lâm sàng</p>
+          <p id="modalSymptoms" class="mt-1.5 leading-relaxed text-slate-700"></p>
+        </div>
+        <div class="p-4 rounded-xl border border-slate-100 bg-slate-50">
+          <p class="font-bold text-slate-500 uppercase tracking-wider text-[11px]">Hướng xử lý và vật tư tham khảo</p>
+          <p id="modalTreatment" class="mt-1.5 leading-relaxed text-slate-700"></p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= JAVASCRIPT CONTROLLER TỔNG ================= -->
+  <script>
+    const DISEASE_INFO = {
+      Late_Blight: {
+        vi: "Bệnh mốc sương",
+        severity: "Nguy hiểm",
+        color: "#ef4444",
+        emoji: "🚨",
+        symptoms: "Vết úng nước màu nâu sẫm loang cực nhanh, mặt dưới phiến lá sinh tơ nấm trắng bạc. Gây thối khô chồi và trái non.",
+        treatment: "Phun khẩn cấp hoạt chất Metalaxyl-M hoặc Cymoxanil + Mancozeb. Bật quạt thông gió (Relay 2) giảm ẩm tán cây."
+      },
+      Leaf_Miner: {
+        vi: "Sâu vẽ bùa",
+        severity: "Trung bình",
+        color: "#0284c7",
+        emoji: "🐛",
+        symptoms: "Đường hầm ngoằn ngoèo màu trắng bạc trên mặt lá do dòi đục ăn mô diệp lục, làm giảm quang hợp.",
+        treatment: "Phun Abamectin sinh học hoặc Emamectin benzoate. Treo bẫy dính màu vàng bẫy ruồi trưởng thành."
+      },
+      Magnesium_Deficiency: {
+        vi: "Thiếu Magiê (Mg)",
+        severity: "Nhẹ",
+        color: "#10b981",
+        emoji: "🍃",
+        symptoms: "Vàng thịt lá giữa các gân lá (gân chính vẫn xanh đậm). Bắt đầu xuất hiện ở tầng lá già phía dưới.",
+        treatment: "Phun phân bón qua lá Magnesium Sulfate (MgSO₄) nồng độ 1.5 - 2%, tưới thêm phân hữu cơ vi sinh."
+      },
+      Nitrogen_Deficiency: {
+        vi: "Thiếu Nitơ (N)",
+        severity: "Cảnh báo dinh dưỡng",
+        color: "#84cc16",
+        emoji: "🌱",
+        symptoms: "Lá già vàng đều từ gốc cây, sinh trưởng chậm và thân nhỏ do thiếu nguồn đạm.",
+        treatment: "Bổ sung phân đạm theo kết quả phân tích đất và liều khuyến nghị; tránh bón quá mức."
+      },
+      Potassium_Deficiency: {
+        vi: "Thiếu Kali (K)",
+        severity: "Cảnh báo dinh dưỡng",
+        color: "#eab308",
+        emoji: "🍃",
+        symptoms: "Mép lá già vàng rồi cháy nâu, lá quăn và khả năng nuôi quả giảm.",
+        treatment: "Bổ sung KCl hoặc K₂SO₄ theo phân tích đất; kiểm tra cân bằng với canxi và magiê."
+      },
+      Spotted_Wilt_Virus: {
+        vi: "Virus đốm héo (TSWV)",
+        severity: "Rất nguy hiểm",
+        color: "#dc2626",
+        emoji: "🚨",
+        symptoms: "Ngọn non cong queo đổi màu đồng thiếc, đốm nhẫn hoại tử trên trái, toàn cây còi cọc héo rũ nhanh chóng.",
+        treatment: "Không có thuốc chữa trực tiếp. Bắt buộc nhổ bỏ tiêu hủy và phun thuốc kiểm soát véc-tơ bọ trĩ lây bệnh."
+      }
+    };
+
+    const CRITICAL_LIST = ["Late_Blight", "Spotted_Wilt_Virus"];
+    let isPaused = false;
+    let showBoxes = true;
+    let controlMode = null;
+    let relayStates = { 1: null, 2: null, 3: null };
+    let currentSensors = { temp: null, humidity: null, light: null, soil: null, soil_raw: null };
+    let hatState = { connected: false, stale: true };
+    let lastHatSnapshotAt = 0;
+    let lastSensorSample = null;
+    let commandPending = false;
+    let requestVersion = 0;
+    let pollTimer = null;
+    let pollController = null;
+    let pollPromise = null;
+    let lastVisionData = null;
+    let cameraWidth = 640;
+    let cameraHeight = 480;
+    let lastCaptureId = null;
+    let captureInitialized = false;
+    let chatPending = false;
+    let chatSessionId = newSessionId();
+    const historyRows = [];
+    const MAX_HISTORY = 300;
+    let currentDetections = [];
+    let lineChart = null;
+    let hatEnvChart = null;
+    let apiConnected = false;
+
+    function newSessionId() {
+      if (window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID();
+      const bytes = new Uint8Array(16);
+      window.crypto.getRandomValues(bytes);
+      return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[char]));
+    }
+
+    function setText(id, text) { const el = document.getElementById(id); if (el) el.textContent = text; }
+    function numberText(value, digits = 1) { return Number.isFinite(value) ? value.toFixed(digits) : '--'; }
+    function normalizeDisease(name) {
+      const key = String(name || '').toLowerCase().replace(/pottassium/g, 'potassium').replace(/[\s-]+/g, '_');
+      return Object.keys(DISEASE_INFO).find(candidate => candidate.toLowerCase() === key) || String(name || 'Unknown');
+    }
+
+    function showToast(title, message = "", tone = "success") {
+      const stack = document.getElementById("toastStack");
+      if (!stack) return;
+      const el = document.createElement("div");
+      const icon = tone === "error" ? "solar:danger-triangle-bold" : tone === "warn" ? "solar:info-circle-bold" : "solar:check-circle-bold";
+      const iconColor = tone === "error" ? "text-red-600 bg-red-50" : tone === "warn" ? "text-amber-600 bg-amber-50" : "text-teal-700 bg-teal-50";
+      el.className = "toast";
+      el.innerHTML = `<div class="flex items-start gap-3"><span class="h-8 w-8 rounded-lg ${iconColor} flex items-center justify-center shrink-0"><iconify-icon icon="${icon}" width="18"></iconify-icon></span><div class="min-w-0"><div class="text-xs font-bold text-slate-800">${escapeHtml(title)}</div>${message ? `<div class="mt-0.5 text-[11px] leading-relaxed text-slate-500">${escapeHtml(message)}</div>` : ""}</div></div>`;
+      stack.appendChild(el);
+      setTimeout(() => { el.style.opacity = "0"; el.style.transform = "translateY(-6px)"; el.style.transition = "all .2s ease"; }, 3200);
+      setTimeout(() => el.remove(), 3500);
+    }
+
+    function setApiStatus(connected) {
+      apiConnected = connected;
+      const dot = document.getElementById("apiStatusDot");
+      const txt = document.getElementById("apiStatusText");
+      const health = document.getElementById("headerHealthDot");
+      if (dot) dot.className = `h-2 w-2 rounded-full ${connected ? "bg-emerald-500" : "bg-amber-400"}`;
+      if (txt) { txt.textContent = connected ? "Online" : "Mất kết nối"; txt.className = connected ? "text-emerald-700" : "text-amber-700"; }
+      if (health) health.className = `status-dot ${connected ? "bg-emerald-500" : "bg-amber-400"} shrink-0`;
+      setText('edgeStatus', connected ? 'API ONLINE' : 'API OFFLINE');
+      setText('sideStatus', connected ? 'ONLINE' : 'OFFLINE');
+    }
+
+    function updateSensorBars(s) {
+      const clamp = v => Number.isFinite(v) ? Math.max(0, Math.min(100, v)) : 0;
+      const map = [
+        ["barTemp", Number.isFinite(s.temp) ? clamp(((s.temp - 10) / 35) * 100) : 0],
+        ["barHum", clamp(s.humidity)],
+        ["barLux", clamp((s.light / 30000) * 100)],
+        ["barSoil", clamp(s.soil)]
+      ];
+      map.forEach(([id, val]) => { const el = document.getElementById(id); if (el) el.style.width = `${val}%`; });
+    }
+
+    // HÀM CHUYỂN TAB TỪ THANH SIDEBAR
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+      document.getElementById(`tab-${tabId}`).classList.remove('hidden');
+
+      // Update Desktop Nav styles
+      ['monitor', 'hat', 'analytics', 'encyclopedia', 'ai-assistant'].forEach(id => {
+        const btn = document.getElementById(`nav-${id}`);
+        if (btn) {
+          if (id === tabId) {
+            btn.className = "nav-item-active w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold text-emerald-800 transition border border-emerald-200";
+          } else {
+            btn.className = "w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition border border-transparent";
+          }
+        }
+      });
+
+      // Update Header title
+      const titleMap = {
+        'monitor': 'Giám sát Camera AI & Chẩn đoán bệnh',
+        'hat': 'Bo mạch HAT · Cảm biến & Cơ cấu chấp hành',
+        'analytics': 'Phân tích dữ liệu & Nhật ký vận hành',
+        'encyclopedia': 'Thư viện thông tin bệnh và rối loạn dinh dưỡng',
+        'ai-assistant': 'Trợ lý nông học AI · Context-aware'
+      };
+      document.getElementById("headerTitle").textContent = titleMap[tabId] || 'TomatoGuard AI';
+
+      // Resize charts
+      if (tabId === 'analytics' && lineChart) setTimeout(() => lineChart.resize(), 100);
+      if (tabId === 'hat' && hatEnvChart) setTimeout(() => hatEnvChart.resize(), 100);
+    }
+
+    // Only MCU-confirmed state is rendered. One command at a time.
+    function hatReady() {
+      return hatState.connected === true && hatState.stale === false && hatState.outputs_uncertain !== true;
+    }
+
+    function hatControlsReady() {
+      return hatReady() || hatState.controls_available === true;
+    }
+
+    function renderControls() {
+      const ready = hatControlsReady();
+      for (const mode of ['auto', 'manual']) {
+        const btn = document.getElementById(mode === 'auto' ? 'modeAuto' : 'modeManual');
+        btn.disabled = commandPending || !ready || controlMode === mode;
+        btn.className = 'px-3.5 py-1.5 rounded-md text-xs font-semibold transition ' +
+          (controlMode === mode ? 'bg-white text-emerald-700 shadow-xs' : 'text-slate-600');
+        btn.setAttribute('aria-pressed', String(controlMode === mode));
+      }
+      const label = controlMode === 'auto' ? 'TỰ ĐỘNG' : controlMode === 'manual' ? 'THỦ CÔNG' : '--';
+      setText('globalModeBadge', controlMode ? controlMode.toUpperCase() : '--');
+      setText('stripModeText', label);
+      setText('heroModeText', label);
+      for (const id of [1, 2, 3]) updateRelayCard(id, relayStates[id]);
+      document.querySelectorAll('[data-hat-action]').forEach(button => { button.disabled = commandPending || !ready; });
+      if (hatState.simulated === true) {
+        setText('hatControlHint', 'Che do mo phong: co the thu nut khi ESP32 chua ket noi.');
+        return;
+      }
+      setText('hatControlHint', !ready ? 'HAT chưa có dữ liệu mới. Điều khiển đang khóa.' :
+        commandPending ? 'Đang chờ ESP32 xác nhận lệnh...' :
+        controlMode === 'auto' ? 'ESP32 điều khiển theo ngưỡng cảm biến trong firmware. Chuyển Thủ công để điều khiển từng relay.' :
+        'Chế độ thủ công: trạng thái relay chỉ đổi sau khi ESP32 xác nhận.');
+    }
+
+    function updateRelayCard(id, state) {
+      const known = typeof state === 'boolean';
+      const active = state === true;
+      const names = {1:'ĐÈN', 2:'QUẠT', 3:'BƠM'};
+      const card = document.getElementById('cardRelay' + id);
+      const btn = document.getElementById('btnRelay' + id);
+      const icon = document.getElementById('iconRelay' + id);
+      const badge = document.getElementById('badgeRelay' + id);
+      card.classList.toggle('relay-card-active', active);
+      badge.textContent = known ? (active ? 'ON' : 'OFF') : '--';
+      badge.className = 'px-2 py-0.5 rounded text-[10px] font-mono font-bold ' + (active ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-600');
+      setText('ledRelay' + id, 'LED LD' + (id + 2) + ' (' + (known ? (active ? 'Sáng' : 'Tắt') : 'Chưa rõ') + ')');
+      icon.className = 'h-11 w-11 rounded-xl flex items-center justify-center text-2xl transition ' +
+        (active ? 'bg-teal-500 text-white' : 'bg-slate-200 text-slate-600');
+      btn.textContent = !known ? 'CHƯA CÓ TRẠNG THÁI' : (active ? 'TẮT ' : 'BẬT ') + names[id];
+      btn.className = 'w-full py-2 rounded-lg text-xs font-bold border shadow-xs transition ' +
+        (active ? 'bg-teal-600 text-white border-teal-600' : 'bg-white border-slate-300 text-slate-700');
+      btn.disabled = commandPending || !hatControlsReady() || controlMode !== 'manual' || !known;
+    }
+
+    async function requestJson(url, options = {}, timeoutMs = 7000, externalController = null) {
+      const controller = externalController || new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const method = (options.method || 'GET').toUpperCase();
+        const headers = {...(options.headers || {})};
+        if (!['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+          headers['X-CSRF-Token'] = document.querySelector('meta[name="csrf-token"]').content;
+        }
+        const response = await fetch(url, {...options, headers, cache:'no-store', signal:controller.signal});
+        if (response.status === 401) { window.location.assign('/login'); throw new Error('Phiên đăng nhập đã hết hạn.'); }
+        const data = await response.json();
+        if (!response.ok || data.ok === false) {
+          const msg = data.error ? (data.details ? `${data.error} [Chi tiết: ${data.details}]` : data.error) : ('HTTP ' + response.status);
+          const error = new Error(msg);
+          error.snapshot = data;
+          throw error;
+        }
+        return data;
+      } finally { clearTimeout(timer); }
+    }
+
+    async function sendHatCommand(url, payload, title) {
+      if (commandPending || !hatControlsReady()) return false;
+      commandPending = true;
+      requestVersion += 1;
+      clearTimeout(pollTimer);
+      if (pollController) pollController.abort();
+      renderControls();
+      try {
+        // Wait for an aborted poll to finish before issuing the mutation.
+        if (pollPromise) await pollPromise;
+        const data = await requestJson(url, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)}, 12000);
+        if (data.ok !== true) throw new Error('ESP32 chưa xác nhận lệnh.');
+        applyHatSnapshot(data);
+        const simulated = data.hat?.simulated === true || data.simulated === true;
+        showToast(simulated ? 'MO PHONG' : title,
+          simulated ? 'ESP32 chua ket noi; chua co tac dong phan cung.' : 'ESP32 da xac nhan lenh.',
+          simulated ? 'warn' : 'success');
+        return true;
+      } catch (error) {
+        if (error.snapshot && error.snapshot.hat) applyHatSnapshot(error.snapshot);
+        else applyHatSnapshot({hat:{connected:false, stale:true, error:'Không nhận được xác nhận; đang kiểm tra lại HAT.'}});
+        showToast('Lệnh chưa được xác nhận', error.name === 'AbortError' ? 'Hết thời gian chờ. Đang đọc lại trạng thái thực tế.' : error.message, 'error');
+        return false;
+      } finally {
+        commandPending = false;
+        renderControls();
+        pollTimer = setTimeout(fetchDetections, 0);
+      }
+    }
+
+    async function setControlMode(mode) {
+      if (!['auto','manual'].includes(mode) || mode === controlMode) return;
+      return sendHatCommand('/api/hat/mode', {mode}, 'Đã xác nhận chế độ ' + (mode === 'auto' ? 'tự động' : 'thủ công'));
+    }
+
+    async function toggleRelay(id) {
+      if (controlMode !== 'manual' || typeof relayStates[id] !== 'boolean') return;
+      return sendHatCommand('/api/relay', {relay:id, state:!relayStates[id]}, 'Đã xác nhận lệnh Relay ' + id);
+    }
+
+    async function triggerHardwareAction(action) {
+      if (!['capture','up','ok','down'].includes(action)) return;
+      const previousCaptureId = lastCaptureId;
+      const accepted = await sendHatCommand('/api/hat/action', {action}, 'HAT đã nhận ' + action.toUpperCase());
+      if (accepted && action === 'capture' && lastCaptureId === previousCaptureId) setCaptureMessage('HAT đã nhận yêu cầu chụp; chờ Raspberry Pi lưu ảnh.');
+    }
+
+    function setCaptureMessage(message) {
+      setText('captureStatus', message);
+      setText('captureStatusMonitor', message);
+    }
+
+    function formatTime(sec) {
+      const s = Math.floor(sec || 0);
+      const h = Math.floor(s / 3600);
+      const m = Math.floor((s % 3600) / 60);
+      const seconds = s % 60;
+      return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(seconds).padStart(2,'0')}`;
+    }
+
+    // DRAW BOUNDING BOX
+    function drawBoundingBoxes(detections) {
+      const canvas = document.getElementById("detectionCanvas");
+      const ctx = canvas.getContext("2d");
+      canvas.width = canvas.parentElement.clientWidth;
+      canvas.height = canvas.parentElement.clientHeight;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      if (!showBoxes || !detections || detections.length === 0) return;
+
+      const scaleX = canvas.width / cameraWidth;
+      const scaleY = canvas.height / cameraHeight;
+
+      detections.forEach(d => {
+        if (!d.box) return;
+        const [x1, y1, x2, y2] = d.box;
+        const rx = x1 * scaleX;
+        const ry = y1 * scaleY;
+        const rw = (x2 - x1) * scaleX;
+        const rh = (y2 - y1) * scaleY;
+
+        const info = DISEASE_INFO[d.name];
+        const color = info ? info.color : "#10b981";
+
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2.5;
+        ctx.strokeRect(rx, ry, rw, rh);
+
+        const label = `${(info ? info.vi : d.name)} ${(d.conf * 100).toFixed(0)}%`;
+        ctx.font = "bold 11px 'Plus Jakarta Sans', sans-serif";
+        const width = ctx.measureText(label).width;
+
+        ctx.fillStyle = color;
+        ctx.fillRect(rx, ry - 19, width + 8, 19);
+
+        ctx.fillStyle = "#ffffff";
+        ctx.fillText(label, rx + 4, ry - 5);
+      });
+    }
+
+    function toggleBoundingBoxes() {
+      showBoxes = !showBoxes;
+      const btn = document.getElementById("toggleBoxesBtn");
+      btn.textContent = showBoxes ? "Box: BẬT" : "Box: TẮT";
+      btn.className = showBoxes
+        ? "px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-emerald-300 bg-emerald-50 text-emerald-700"
+        : "px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-slate-200 bg-white text-slate-500";
+      drawBoundingBoxes(currentDetections);
+    }
+
+    function updateDiagnosticList(detections) {
+      const container = document.getElementById("detectionList");
+      if (!detections || detections.length === 0) {
+        container.innerHTML = `
+          <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-100 flex items-center gap-3">
+            <span class="text-lg">🌿</span>
+            <div>
+              <p class="text-xs font-semibold text-slate-800">Chưa ghi nhận vùng bệnh</p>
+              <p class="text-[10px] text-slate-500">Không có phát hiện vượt ngưỡng hiện tại</p>
+            </div>
+          </div>`;
+        return;
+      }
+
+      container.innerHTML = detections.map(d => {
+        const info = DISEASE_INFO[d.name] || { vi: d.name_vi || d.name };
+        const confPercent = Math.round(d.conf * 100);
+        return `
+          <div class="p-3 rounded-xl bg-slate-50 border border-slate-200/80 hover:border-slate-300 transition">
+            <div class="flex items-center justify-between text-xs">
+              <span class="font-bold text-slate-800">${escapeHtml(info.vi)}</span>
+              <span class="font-mono text-[10px] px-1.5 py-0.5 rounded bg-white border border-slate-200 text-slate-700 font-semibold">${confPercent}% conf</span>
+            </div>
+            <div class="mt-2 h-1.5 w-full bg-slate-200 rounded-full overflow-hidden">
+              <div class="h-full bg-emerald-600 rounded-full" style="width: ${confPercent}%"></div>
+            </div>
+          </div>`;
+      }).join("");
+    }
+
+    function updateTreatmentList(detections) {
+      const panel = document.getElementById("treatmentPanel");
+      if (!detections || detections.length === 0) {
+        panel.innerHTML = `<p class="text-xs text-slate-500 p-3.5 rounded-xl bg-slate-50 border border-slate-100">Duy trì độ ẩm và dinh dưỡng cân đối theo lịch tiêu chuẩn.</p>`;
+        return;
+      }
+
+      const seen = new Set();
+      const unique = detections.filter(d => !seen.has(d.name) && seen.add(d.name));
+
+      panel.innerHTML = unique.map(d => {
+        const info = DISEASE_INFO[d.name] || {vi: d.name_vi || d.name, treatment: "Chưa có hướng dẫn cho nhãn này."};
+        return `
+          <div class="p-3 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1">
+            <span class="text-xs font-bold text-emerald-700">${escapeHtml(info.vi)}</span>
+            <p class="text-[11px] text-slate-600 leading-relaxed">${escapeHtml(info.treatment)}</p>
+          </div>`;
+      }).join("");
+    }
+
+    function checkCriticalAlarm(detections) {
+      const hasCritical = (detections || []).some(d => CRITICAL_LIST.includes(d.name));
+      const banner = document.getElementById("criticalBanner");
+      const badge = document.getElementById("aiActiveBadge");
+
+      if (hasCritical) {
+        banner.classList.remove("hidden");
+        if (badge) badge.classList.remove("hidden");
+      } else {
+        banner.classList.add("hidden");
+        if (badge) badge.classList.add("hidden");
+      }
+    }
+
+    // CHARTS INITIALIZATION
+    function initCharts() {
+      if (typeof Chart === "undefined") return;
+      // 1. Chart 24h Analytics
+      const ctx1 = document.getElementById("lineChart").getContext("2d");
+      lineChart = new Chart(ctx1, {
+        type: "line",
+        data: {
+          labels: [],
+          datasets: [{
+            label: "Số điểm bệnh",
+            data: [],
+            borderColor: "#059669",
+            backgroundColor: "rgba(5, 150, 105, 0.08)",
+            tension: 0.3,
+            fill: true,
+            pointRadius: 3.5,
+            borderWidth: 2
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { ticks: { color: "#64748b", font: { size: 10 } }, grid: { color: "#f1f5f9" } },
+            y: { ticks: { color: "#64748b", font: { size: 10 }, stepSize: 1 }, grid: { color: "#f1f5f9" }, beginAtZero: true }
+          }
+        }
+      });
+
+      // 2. Chart Môi trường HAT Tab
+      const ctx2 = document.getElementById("hatEnvChart").getContext("2d");
+      hatEnvChart = new Chart(ctx2, {
+        type: "line",
+        data: {
+          labels: [],
+          datasets: [
+            {
+              label: "Nhiệt độ SHT31 (°C)",
+              data: [],
+              borderColor: "#059669",
+              backgroundColor: "rgba(5, 150, 105, 0.08)",
+              tension: 0.3,
+              fill: false
+            },
+            {
+              label: "Độ ẩm không khí (%RH)",
+              data: [],
+              borderColor: "#2563eb",
+              tension: 0.3
+            },
+            {
+              label: "Độ ẩm đất ADS1115 (%)",
+              data: [],
+              borderColor: "#06b6d4",
+              borderDash: [4, 4],
+              tension: 0.3
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 10 } } } },
+          scales: {
+            x: { ticks: { color: "#64748b", font: { size: 10 } }, grid: { color: "#f1f5f9" } },
+            y: { beginAtZero: true, ticks: { color: "#64748b", font: { size: 10 } }, grid: { color: "#f1f5f9" } }
+          }
+        }
+      });
+    }
+
+    function renderEncyclopedia(filter = "") {
+      const grid = document.getElementById("encyclopediaGrid");
+      const entries = Object.entries(DISEASE_INFO).filter(([k, v]) => {
+        const q = filter.toLowerCase();
+        return k.toLowerCase().includes(q) || v.vi.toLowerCase().includes(q) || v.treatment.toLowerCase().includes(q);
+      });
+
+      grid.innerHTML = entries.map(([key, item]) => `
+        <div onclick="openModal('${key}')" class="p-4 rounded-xl border border-slate-200 bg-white hover:border-emerald-300 hover:shadow-sm cursor-pointer transition flex flex-col justify-between">
+          <div>
+            <div class="flex items-start justify-between">
+              <span class="text-2xl">${item.emoji}</span>
+              <span class="px-2 py-0.5 rounded text-[10px] font-bold border border-slate-200 bg-slate-50 text-slate-700">${item.severity}</span>
+            </div>
+            <h4 class="mt-3 text-xs font-bold text-slate-800">${item.vi}</h4>
+            <p class="text-[10px] font-mono text-slate-400">${key}</p>
+            <p class="mt-2 text-xs text-slate-500 line-clamp-2 leading-relaxed">${item.symptoms}</p>
+          </div>
+          <div class="mt-4 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs text-emerald-600 font-semibold">
+            <span>Chi tiết phác đồ</span>
+            <iconify-icon icon="solar:arrow-right-linear"></iconify-icon>
+          </div>
+        </div>
+      `).join("");
+    }
+
+    function openModal(key) {
+      const info = DISEASE_INFO[key];
+      if (!info) return;
+      document.getElementById("modalTitle").textContent = info.vi;
+      document.getElementById("modalSubtitle").textContent = key;
+      document.getElementById("modalSeverity").textContent = info.severity;
+      document.getElementById("modalSymptoms").textContent = info.symptoms;
+      document.getElementById("modalTreatment").textContent = info.treatment;
+      document.getElementById("diseaseModal").classList.remove("hidden");
+      document.getElementById("diseaseModal").classList.add("flex");
+    }
+
+    function closeModal() {
+      document.getElementById("diseaseModal").classList.add("hidden");
+    }
+
+    function appendChatMessage(message, role) {
+      const box = document.getElementById('fullChatMessages');
+      const row = document.createElement('div');
+      row.className = role === 'user' ? 'flex justify-end' : 'flex justify-start';
+      const bubble = document.createElement('div');
+      bubble.className = 'max-w-[85%] rounded-2xl px-4 py-3 text-xs sm:text-sm whitespace-pre-wrap ' +
+        (role === 'user' ? 'bg-emerald-600 text-white' : role === 'error' ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-slate-50 text-slate-700 border border-slate-200');
+      bubble.textContent = message;
+      row.appendChild(bubble);
+      box.appendChild(row);
+      box.scrollTop = box.scrollHeight;
+    }
+
+    function showChatLoading() {
+      removeChatLoading();
+      const box = document.getElementById('fullChatMessages');
+      const row = document.createElement('div');
+      row.id = 'chatLoadingIndicator';
+      row.className = 'flex justify-start';
+      row.innerHTML = `
+        <div class="rounded-2xl px-4 py-3 bg-slate-100 border border-slate-200 text-slate-500 text-xs flex items-center gap-2">
+          <iconify-icon icon="line-md:loading-loop" class="text-base text-emerald-600"></iconify-icon>
+          <span>Trợ lý AI đang tra cứu dữ liệu trạm và soạn câu trả lời...</span>
+        </div>`;
+      box.appendChild(row);
+      box.scrollTop = box.scrollHeight;
+    }
+
+    function removeChatLoading() {
+      const el = document.getElementById('chatLoadingIndicator');
+      if (el) el.remove();
+    }
+
+    async function sendChatMessage(msg) {
+      if (chatPending || !msg.trim()) return;
+      chatPending = true;
+      appendChatMessage(msg, 'user');
+      showChatLoading();
+      const sessionId = chatSessionId;
+      const submit = document.querySelector('#fullChatForm button[type="submit"]');
+      if (submit) submit.disabled = true;
+      try {
+        const disease = currentDetections[0];
+        const report = {detections:currentDetections, sensors:currentSensors, relays:relayStates, control_mode:controlMode, hat:hatState};
+        const data = await requestJson('/api/chat', {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({message:msg, session_id:sessionId, detected_disease:disease ? disease.name : null, report, sensors:currentSensors, relays:relayStates})
+        }, 90000);
+        removeChatLoading();
+        if (sessionId === chatSessionId) appendChatMessage(data.answer || 'Trợ lý chưa trả về nội dung.', 'assistant');
+      } catch (error) {
+        removeChatLoading();
+        if (sessionId === chatSessionId) appendChatMessage('Không thể nhận câu trả lời từ AI: ' + (error.name === 'AbortError' ? 'Hết thời gian chờ.' : error.message), 'error');
+      } finally {
+        removeChatLoading();
+        chatPending = false;
+        if (submit) submit.disabled = false;
+      }
+    }
+
+    function handleChatSubmit(event) {
+      event.preventDefault();
+      const input = document.getElementById('fullChatInput');
+      if (!chatPending && input.value.trim()) {
+        const message = input.value.trim();
+        input.value = '';
+        sendChatMessage(message);
+      }
+    }
+
+    function quickAsk(text) { switchTab('ai-assistant'); sendChatMessage(text); }
+    function clearChat() { document.getElementById('fullChatMessages').textContent = ''; chatSessionId = newSessionId(); }
+
+    function appendChartSample(chart, values) {
+      if (!chart) return;
+      chart.data.labels.push(new Date().toLocaleTimeString('vi-VN'));
+      chart.data.datasets.forEach((dataset, index) => dataset.data.push(values[index]));
+      if (chart.data.labels.length > MAX_HISTORY) {
+        chart.data.labels.shift();
+        chart.data.datasets.forEach(dataset => dataset.data.shift());
+      }
+      chart.update('none');
+    }
+
+    function applyHatSnapshot(data) {
+      hatState = data.hat && typeof data.hat === 'object' ? data.hat : {connected:false, stale:true};
+      const fresh = hatState.connected === true && hatState.stale === false;
+      const controlsReady = hatControlsReady();
+      lastHatSnapshotAt = Date.now();
+      const sensors = fresh && data.sensors ? data.sensors : {};
+      currentSensors = Object.fromEntries(['temp','humidity','light','soil','soil_raw'].map(key => [key, Number.isFinite(sensors[key]) ? sensors[key] : null]));
+      relayStates = Object.fromEntries([1,2,3].map(id => [id, controlsReady && typeof data.relays?.[id] === 'boolean' ? data.relays[id] : null]));
+      controlMode = controlsReady && ['manual','auto'].includes(data.control_mode) ? data.control_mode : null;
+      const sensorOk = hatState.sensor_ok || {};
+      if (sensorOk.sht31 === false) currentSensors.temp = currentSensors.humidity = null;
+      if (sensorOk.bh1750 === false) currentSensors.light = null;
+      if (sensorOk.ads1115 === false) currentSensors.soil = currentSensors.soil_raw = null;
+      setText('hatValTemp', numberText(currentSensors.temp));
+      setText('hatValHum', numberText(currentSensors.humidity));
+      setText('hatValLux', numberText(currentSensors.light, 0));
+      setText('hatValSoil', numberText(currentSensors.soil));
+      updateSensorBars(currentSensors);
+      const status = !fresh ? 'Không có dữ liệu mới' : controlsReady ? 'Đã nhận dữ liệu' : 'Chờ xác nhận relay';
+      const displayedStatus = hatState.simulated === true ? 'MO PHONG - CHUA CO ESP32' : status;
+      setText('hatStatusText', displayedStatus);
+      setText('uartStatus', displayedStatus);
+      document.getElementById('hatStatusDot').className = 'h-2 w-2 rounded-full ' + (fresh ? 'bg-emerald-500' : 'bg-amber-400');
+      const navDot = document.querySelector('#nav-hat > span');
+      if (navDot) navDot.className = 'h-2 w-2 rounded-full ' + (fresh ? 'bg-emerald-500' : 'bg-slate-300');
+      const issues = [hatState.error, ...(Array.isArray(hatState.errors) ? hatState.errors : [])].filter(Boolean);
+      if (fresh && !controlsReady) issues.push('Trạng thái relay chưa được xác nhận; điều khiển đang khóa.');
+      if (fresh && currentSensors.soil === null) issues.push('Chưa có độ ẩm đất đã hiệu chuẩn.');
+      if (!fresh && !issues.length) issues.push('Chưa kết nối HAT hoặc telemetry đã quá hạn.');
+      setText('hatErrorBadge', issues.join(' · '));
+      document.getElementById('hatErrorBadge').classList.toggle('hidden', issues.length === 0);
+      renderControls();
+      // Device uptime distinguishes a new sample from repeated GET responses.
+      const sampleId = fresh ? hatState.uptime_ms : 'offline';
+      if (sampleId !== lastSensorSample) {
+        appendChartSample(hatEnvChart, [currentSensors.temp, currentSensors.humidity, currentSensors.soil]);
+        lastSensorSample = sampleId;
+      }
+      if (data.last_capture && typeof data.last_capture.url === 'string' && /^\/captures\/[A-Za-z0-9_.-]+$/.test(data.last_capture.url)) {
+        const capture = data.last_capture;
+        for (const id of ['lastCaptureLink', 'lastCaptureLinkMonitor']) {
+          const link = document.getElementById(id);
+          link.href = capture.url;
+          link.download = capture.filename || '';
+          link.classList.remove('hidden');
+        }
+        if (capture.id !== lastCaptureId) {
+          setCaptureMessage('Đã lưu ảnh: ' + (capture.filename || capture.id));
+          if (captureInitialized) showToast('Đã chụp ảnh', 'Pi đã lưu ' + (capture.filename || 'ảnh mới'), 'success');
+          lastCaptureId = capture.id;
+        }
+      }
+      if (data.last_capture_error) setCaptureMessage('Không lưu được ảnh: ' + data.last_capture_error);
+      captureInitialized = true;
+    }
+
+    function renderVision(data) {
+      const available = data.camera_ok === true && data.yolo_ok === true;
+      const threshold = Number(document.getElementById('confSlider').value);
+      currentDetections = available && Array.isArray(data.detections) ? data.detections
+        .filter(d => d && Number.isFinite(d.conf) && d.conf >= threshold && d.conf <= 1)
+        .map(d => ({...d, name:normalizeDisease(d.name)})) : [];
+      const diseaseCount = currentDetections.length;
+      setText('diseaseCount', available ? diseaseCount : '--');
+      setText('countBadge', available ? (diseaseCount ? 'Đã phát hiện' : 'Chưa phát hiện') : 'Chưa có dữ liệu AI');
+      setText('fpsOverlay', numberText(data.timing?.fps_effective));
+      setText('fpsText', numberText(data.timing?.fps_effective));
+      setText('latencyText', numberText(data.timing?.inference_ms));
+      cameraWidth = Number.isFinite(data.camera_width) && data.camera_width > 0 ? data.camera_width : 640;
+      cameraHeight = Number.isFinite(data.camera_height) && data.camera_height > 0 ? data.camera_height : 480;
+      document.getElementById('videoContainer').style.aspectRatio = cameraWidth + ' / ' + cameraHeight;
+      drawBoundingBoxes(currentDetections);
+      if (available) {
+        updateDiagnosticList(currentDetections);
+        updateTreatmentList(currentDetections);
+      } else {
+        setText('detectionList', data.yolo_error || 'Chưa có kết quả nhận diện từ camera.');
+        setText('treatmentPanel', 'Chờ kết quả nhận diện mới.');
+      }
+      checkCriticalAlarm(currentDetections);
+    }
+
+    function processData(data) {
+      applyHatSnapshot(data);
+      setText('lastUpdateText', 'Cập nhật ' + new Date().toLocaleTimeString('vi-VN'));
+      if (!isPaused) {
+        lastVisionData = data;
+        renderVision(data);
+        const count = data.camera_ok && data.yolo_ok ? currentDetections.length : null;
+        appendChartSample(lineChart, [count]);
+        historyRows.push({time:new Date().toISOString(), count, ...currentSensors, ...Object.fromEntries([1,2,3].map(id => ['relay'+id,relayStates[id]]))});
+        if (historyRows.length > MAX_HISTORY) historyRows.shift();
+        const uptime = Number.isFinite(data.uptime) ? formatTime(data.uptime) : '--';
+        setText('headerUptime', uptime);
+        setText('panelUptime', uptime);
+        const cameraOk = data.camera_ok === true;
+        setText('cameraStatusText', cameraOk ? 'Đã có hình ảnh' : 'Chưa có hình ảnh');
+        document.getElementById('cameraStatusDot').className = 'h-2 w-2 rounded-full ' + (cameraOk ? 'bg-emerald-500' : 'bg-amber-400');
+        setText('headerModelChip', data.model_name || 'Edge AI · --');
+        document.querySelectorAll('[data-model-name]').forEach(el => { el.textContent = data.model_name || '--'; });
+      }
+    }
+
+    function markUnavailable() {
+      setApiStatus(false);
+      applyHatSnapshot({hat:{connected:false, stale:true, error:'Không truy cập được Web API.'}});
+      lastVisionData = null;
+      renderVision({});
+      setText('cameraStatusText', 'Chưa rõ trạng thái');
+      document.getElementById('cameraStatusDot').className = 'h-2 w-2 rounded-full bg-slate-300';
+      setText('lastUpdateText', 'Mất kết nối · đang thử lại');
+    }
+
+    async function fetchDetections() {
+      clearTimeout(pollTimer);
+      if (commandPending || pollPromise) return;
+      const version = requestVersion;
+      const controller = new AbortController();
+      pollController = controller;
+      const run = async () => {
+        try {
+          const data = await requestJson(isPaused ? '/api/hat' : '/api/detections', {}, 5000, controller);
+          if (version !== requestVersion) return;
+          setApiStatus(true);
+          processData(data);
+        } catch (error) {
+          if (version === requestVersion) markUnavailable();
+        }
+      };
+      pollPromise = run();
+      await pollPromise;
+      pollPromise = null;
+      pollController = null;
+      if (!commandPending) pollTimer = setTimeout(fetchDetections, 1500);
+    }
+
+    function exportCSV() {
+      if (!historyRows.length) { showToast('Chưa có lịch sử', 'Chờ dữ liệu thực tế từ trạm.', 'warn'); return; }
+      const columns = ['time','count','temp','humidity','light','soil','soil_raw','relay1','relay2','relay3'];
+      const csv = [columns.join(','), ...historyRows.map(row => columns.map(key => row[key] ?? '').join(','))].join('\r\n');
+      const url = URL.createObjectURL(new Blob(['\ufeff' + csv], {type:'text/csv;charset=utf-8'}));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'tomatoguard_' + Date.now() + '.csv';
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    document.getElementById('pauseBtn').addEventListener('click', function() {
+      isPaused = !isPaused;
+      this.textContent = isPaused ? 'Tiếp tục AI' : 'Tạm dừng AI';
+      setText('lastUpdateText', isPaused ? 'Đã tạm dừng cập nhật AI · HAT vẫn hoạt động' : 'Đang cập nhật lại...');
+    });
+
+    document.getElementById('captureBtn').addEventListener('click', () => {
+      const feed = document.getElementById('videoFeed');
+      if (!feed.naturalWidth || !feed.naturalHeight || !lastVisionData?.camera_ok) {
+        showToast('Chưa chụp được ảnh', 'Camera chưa có khung hình mới.', 'warn');
+        return;
+      }
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = feed.naturalWidth;
+        canvas.height = feed.naturalHeight;
+        canvas.getContext('2d').drawImage(feed, 0, 0);
+        const link = document.createElement('a');
+        link.href = canvas.toDataURL('image/jpeg', 0.95);
+        link.download = 'tomato_scan_' + Date.now() + '.jpg';
+        link.click();
+      } catch (error) { showToast('Không chụp được ảnh', error.message, 'error'); }
+    });
+
+    document.getElementById('confSlider').addEventListener('input', event => {
+      setText('confVal', event.target.value);
+      if (lastVisionData) renderVision(lastVisionData);
+    });
+    document.getElementById('searchDisease').addEventListener('input', event => renderEncyclopedia(event.target.value));
+    window.addEventListener('resize', () => drawBoundingBoxes(currentDetections));
+    initCharts();
+    renderEncyclopedia();
+    markUnavailable();
+    fetchDetections();
+    // Clear old hardware values even while a command or request is waiting.
+    setInterval(() => {
+      if (hatState.connected === true && hatState.stale === false && Date.now() - lastHatSnapshotAt > 6000) {
+        applyHatSnapshot({hat:{connected:false, stale:true, error:'Quá thời gian cập nhật trạng thái HAT.'}});
+      }
+    }, 500);
+  </script>
+</body>
+</html>

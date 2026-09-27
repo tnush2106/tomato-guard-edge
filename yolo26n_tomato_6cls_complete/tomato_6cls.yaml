@@ -1,0 +1,11 @@
+path: /kaggle/working/dataset_6cls
+train: images/train
+val: images/val
+nc: 6
+names:
+  0: Late blight
+  1: Leaf miner
+  2: Magnesium deficiency
+  3: Nitrogen deficiency
+  4: Potassium deficiency
+  5: Spotted wilt virus

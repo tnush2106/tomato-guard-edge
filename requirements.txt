@@ -3,22 +3,28 @@
 # Platform: Raspberry Pi 4 (ARM64)
 # ──────────────────────────────────────────────
 #
-# opencv và numpy được cài qua apt (KHÔNG cài qua pip):
-#   sudo apt install python3-opencv python3-numpy rpicam-apps
+# OpenCV duoc cai qua apt. NumPy duoc cai rieng trong venv de tranh xung dot
+# BLAS giua NumPy he thong va PyTorch tren Raspberry Pi OS moi:
+#   sudo apt install python3-opencv rpicam-apps
 #
 # Chỉ cài các thư viện sau qua pip:
 
 # Core — Web server + YOLO inference
 flask>=2.3.0
-ultralytics>=8.0.0
+numpy>=2,<2.3
+ultralytics>=8.4.142,<9
 ncnn
+pyserial>=3.5,<4
 
 # Chatbot AI (LangGraph + OpenAI)
 langchain-core
 langchain-openai
+langchain-google-genai
 langgraph
 langchain
 langchain_community
+langchain-text-splitters
+python-dotenv
 tavily-python
 pypdf
 cryptography
@@ -27,6 +33,5 @@ faiss-cpu
 
 # ──────────────────────────────────────────────
 # Lưu ý khi chạy trên Raspberry Pi:
-# export OPENBLAS_CORETYPE=ARMV8
 # export OMP_NUM_THREADS=4
 # ──────────────────────────────────────────────

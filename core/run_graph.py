@@ -5,12 +5,12 @@ app = build_graph()
 
 def run_graph(user_input: str, messages=None, system_context: str | None = None):
     print("In the run graph")
-    if messages is None:
-        messages = []
+    messages = list(messages or [])
 
-    # Inject system context ONCE
-    if system_context and not any(isinstance(m, SystemMessage) for m in messages):
-        messages.append(SystemMessage(content=system_context))
+    # Sensor/relay observations change every turn; do not retain a stale snapshot.
+    if system_context:
+        messages = [m for m in messages if not isinstance(m, SystemMessage)]
+        messages.insert(0, SystemMessage(content=system_context))
 
     # Append user message (✅ FIXED)
     messages.append(HumanMessage(content=user_input))
